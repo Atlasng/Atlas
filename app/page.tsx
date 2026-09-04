@@ -99,7 +99,7 @@ export default function Home() {
             </button>
             <Link
               href="/login"
-              className="focus-ring hidden font-body text-sm text-navy-soft transition-colors hover:text-navy sm:inline"
+              className="focus-ring whitespace-nowrap border border-blue px-4 py-2 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
             >
               Log in
             </Link>
@@ -144,7 +144,7 @@ export default function Home() {
               No digging through unrelated listings to find the one thing
               you came for.
             </p>
-            <div className="mt-9 flex items-center gap-6">
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
               <a
                 href="#categories"
                 className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
@@ -153,9 +153,15 @@ export default function Home() {
               </a>
               <Link
                 href="/signup"
-                className="focus-ring border-b border-navy pb-0.5 font-body text-sm text-navy transition-colors hover:border-blue hover:text-blue"
+                className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
               >
                 Create an account
+              </Link>
+              <Link
+                href="/sell"
+                className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+              >
+                Become a seller
               </Link>
             </div>
           </div>
