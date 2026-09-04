@@ -3,10 +3,11 @@
 import { Suspense, useState, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { createClient } from "@/lib/supabase/client";
 
 function VerifyOtpForm() {
   const router = useRouter();
+  const supabase = createClient();
   const searchParams = useSearchParams();
   const email = searchParams.get("email") || "";
 
@@ -34,7 +35,7 @@ function VerifyOtpForm() {
       return;
     }
 
-    router.push("/");
+    router.push("/dashboard");
   }
 
   async function handleResend() {

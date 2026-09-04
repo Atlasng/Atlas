@@ -144,7 +144,7 @@ export default function Home() {
               No digging through unrelated listings to find the one thing
               you came for.
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-4">
+            <div className="mt-9 flex items-center gap-6">
               <a
                 href="#categories"
                 className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
@@ -156,12 +156,6 @@ export default function Home() {
                 className="focus-ring border-b border-navy pb-0.5 font-body text-sm text-navy transition-colors hover:border-blue hover:text-blue"
               >
                 Create an account
-              </Link>
-              <Link
-                href="/sell"
-                className="focus-ring border-b border-navy pb-0.5 font-body text-sm text-navy transition-colors hover:border-blue hover:text-blue"
-              >
-                Become a seller
               </Link>
             </div>
           </div>
