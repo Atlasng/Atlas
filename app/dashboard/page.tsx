@@ -102,9 +102,9 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
-          <Link href="/" className="font-display text-2xl tracking-tightest text-navy">
+          <span className="font-display text-2xl tracking-tightest text-navy">
             Atlas
-          </Link>
+          </span>
           <button
             onClick={handleLogout}
             className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
