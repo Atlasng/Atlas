@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -24,24 +24,21 @@ const categoryFilters = [
   "Sports & Fitness",
 ];
 
-const products: Product[] = [
-  { id: "p1", name: "Wireless earbuds", category: "Electronics", price: "₦45,000", image: "https://picsum.photos/seed/atlas-p1/500/500" },
-  { id: "p2", name: "Smart watch", category: "Electronics", price: "₦68,500", image: "https://picsum.photos/seed/atlas-p2/500/500" },
-  { id: "p3", name: "Denim jacket", category: "Fashion", price: "₦22,000", image: "https://picsum.photos/seed/atlas-p3/500/500" },
-  { id: "p4", name: "Leather sneakers", category: "Fashion", price: "₦31,500", image: "https://picsum.photos/seed/atlas-p4/500/500" },
-  { id: "p5", name: "Table lamp", category: "Home & Living", price: "₦12,000", image: "https://picsum.photos/seed/atlas-p5/500/500" },
-  { id: "p6", name: "Throw pillow set", category: "Home & Living", price: "₦9,500", image: "https://picsum.photos/seed/atlas-p6/500/500" },
-  { id: "p7", name: "Shea butter cream", category: "Beauty & Care", price: "₦5,200", image: "https://picsum.photos/seed/atlas-p7/500/500" },
-  { id: "p8", name: "Rice, 5kg bag", category: "Groceries", price: "₦8,900", image: "https://picsum.photos/seed/atlas-p8/500/500" },
-  { id: "p9", name: "Yoga mat", category: "Sports & Fitness", price: "₦14,700", image: "https://picsum.photos/seed/atlas-p9/500/500" },
-];
+const products: Product[] = [];
 
-export default function DashboardPage() {
+function DashboardContent() {
   const router = useRouter();
   const supabase = createClient();
+  const searchParams = useSearchParams();
+
+  const categoryParam = searchParams.get("category");
+  const initialCategory = categoryFilters.includes(categoryParam ?? "")
+    ? (categoryParam as string)
+    : "All";
+
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("All");
+  const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
@@ -49,21 +46,13 @@ export default function DashboardPage() {
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!active) return;
-      if (!session) {
-        router.replace("/login");
-        return;
-      }
-      setUser(session.user);
+      setUser(session?.user ?? null);
       setLoading(false);
     });
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
-        if (!session) {
-          router.replace("/login");
-        } else {
-          setUser(session.user);
-        }
+        setUser(session?.user ?? null);
       }
     );
 
@@ -71,7 +60,7 @@ export default function DashboardPage() {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, supabase]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -102,7 +91,7 @@ export default function DashboardPage() {
   const name =
     (user?.user_metadata?.full_name as string | undefined) ||
     user?.email ||
-    "there";
+    "";
 
   return (
     <main className="min-h-screen bg-paper">
@@ -135,7 +124,8 @@ export default function DashboardPage() {
               />
             </div>
 
-            <button
+            <Link
+              href="/cart"
               aria-label="Cart, 0 items"
               className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
             >
@@ -150,75 +140,118 @@ export default function DashboardPage() {
                 <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
                 <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
               </svg>
-            </button>
+            </Link>
 
-            <button
-              onClick={handleLogout}
-              className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-            >
-              Log out
-            </button>
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+              >
+                Log out
+              </button>
+            ) : (
+              <div className="flex shrink-0 items-center gap-3">
+                <Link
+                  href="/login"
+                  className="focus-ring whitespace-nowrap border border-blue px-4 py-2 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="focus-ring whitespace-nowrap bg-blue px-4 py-2 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+                >
+                  Sign up
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-content px-6 py-12 md:px-10">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-ice text-navy-soft">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <circle cx="9" cy="6.2" r="3.2" stroke="currentColor" strokeWidth="1.5" />
-              <path
-                d="M2.8 15.5c.9-3 3.4-4.8 6.2-4.8s5.3 1.8 6.2 4.8"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <span className="font-display text-2xl tracking-tightest text-navy md:text-3xl">
-            {name}
-          </span>
-        </div>
-
-        {/* Seller CTA */}
-        {hasShop ? (
-          <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
-            <div>
-              <p className="font-body text-sm font-medium text-blue-light">
-                Your shop is live
-              </p>
-              <h2 className="mt-1 font-display text-2xl text-white">
-                Manage your listings and orders
-              </h2>
+      <div className="mx-auto max-w-content px-6 pb-12 pt-6 md:px-10">
+        {user ? (
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-ice text-navy-soft">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="6.2" r="3.2" stroke="currentColor" strokeWidth="1.5" />
+                <path
+                  d="M2.8 15.5c.9-3 3.4-4.8 6.2-4.8s5.3 1.8 6.2 4.8"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
             </div>
-            <Link
-              href="/dashboard/shop"
-              className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-            >
-              Go to my shop
-            </Link>
+            <span className="font-display text-2xl tracking-tightest text-navy md:text-3xl">
+              {name}
+            </span>
           </div>
         ) : (
-          <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
-            <div>
-              <p className="font-body text-sm font-medium text-blue-light">
-                Sell on Atlas
-              </p>
-              <h2 className="mt-1 font-display text-2xl text-white">
-                Open a shop and start listing products
-              </h2>
-              <p className="mt-2 max-w-md font-body text-sm text-white/70">
-                Set up your storefront in minutes and reach every buyer
-                browsing the marketplace below.
-              </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <p className="font-body text-sm text-navy-soft">
+              Log in or create an account to open a shop and manage orders.
+            </p>
+            <div className="flex gap-3">
+              <Link
+                href="/login"
+                className="focus-ring border border-blue px-4 py-2 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/signup"
+                className="focus-ring bg-blue px-4 py-2 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+              >
+                Sign up
+              </Link>
             </div>
-            <Link
-              href="/dashboard/open-shop"
-              className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-            >
-              Open a shop on Atlas
-            </Link>
           </div>
+        )}
+
+        {/* Seller CTA */}
+        {user && (
+          <>
+            {hasShop ? (
+              <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
+                <div>
+                  <p className="font-body text-sm font-medium text-blue-light">
+                    Your shop is live
+                  </p>
+                  <h2 className="mt-1 font-display text-2xl text-white">
+                    Manage your listings and orders
+                  </h2>
+                </div>
+                <Link
+                  href="/dashboard/shop"
+                  className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+                >
+                  Go to my shop
+                </Link>
+              </div>
+            ) : (
+              <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
+                <div>
+                  <p className="font-body text-sm font-medium text-blue-light">
+                    Sell on Atlas
+                  </p>
+                  <h2 className="mt-1 font-display text-2xl text-white">
+                    Open a shop and start listing products
+                  </h2>
+                  <p className="mt-2 max-w-md font-body text-sm text-white/70">
+                    Set up your storefront in minutes and reach every buyer
+                    browsing the marketplace below.
+                  </p>
+                </div>
+                <Link
+                  href="/dashboard/open-shop"
+                  className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+                >
+                  Open a shop on Atlas
+                </Link>
+              </div>
+            )}
+          </>
         )}
 
         {/* Marketplace */}
@@ -260,7 +293,7 @@ export default function DashboardPage() {
           {/* Product grid */}
           {visibleProducts.length === 0 ? (
             <p className="mt-12 font-body text-sm text-navy-soft">
-              No products in this category yet.
+              No products listed yet. Check back soon.
             </p>
           ) : (
             <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
@@ -301,21 +334,29 @@ export default function DashboardPage() {
         </div>
 
         {/* Footer links */}
-        <div className="mt-16 grid grid-cols-2 gap-4 border-t border-line pt-8">
-          <a
-            href="#"
+        <div className="mt-16 flex flex-wrap items-center justify-center gap-8 border-t border-line pt-8">
+          <Link
+            href="/about"
             className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-navy"
           >
             About us
-          </a>
-          <a
-            href="#"
-            className="focus-ring text-right font-body text-sm text-navy-soft transition-colors hover:text-navy"
+          </Link>
+          <Link
+            href="/contact"
+            className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-navy"
           >
             Contact us
-          </a>
+          </Link>
         </div>
       </div>
     </main>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={null}>
+      <DashboardContent />
+    </Suspense>
   );
 }

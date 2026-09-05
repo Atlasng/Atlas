@@ -2,9 +2,9 @@ import Link from "next/link";
 
 const nav = [
   { label: "Categories", href: "#categories" },
-  { label: "Deals", href: "#" },
-  { label: "Journal", href: "#" },
-  { label: "About", href: "#" },
+  { label: "Deals", href: "/deals" },
+  { label: "Journal", href: "/journal" },
+  { label: "About", href: "/about" },
 ];
 
 type Category = {
@@ -155,7 +155,7 @@ export default function Home() {
             return (
               <Link
                 key={category.slug}
-                href={`/category/${category.slug}`}
+                href={`/dashboard?category=${encodeURIComponent(category.name)}`}
                 className={`focus-ring group relative block overflow-hidden border border-line bg-navy transition-colors hover:border-blue ${
                   isLarge ? "sm:col-span-2 sm:row-span-2" : ""
                 }`}
@@ -235,25 +235,25 @@ export default function Home() {
               </form>
             </div>
             <div className="flex flex-col justify-center gap-4 sm:flex-row md:col-span-7 md:justify-end">
-              <a
-                href="#"
+              <Link
+                href="/contact"
                 className="focus-ring bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
               >
                 Contact us
-              </a>
-              <a
-                href="#"
+              </Link>
+              <Link
+                href="/about"
                 className="focus-ring border border-blue px-6 py-3 text-center font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
               >
                 About us
-              </a>
+              </Link>
             </div>
           </div>
           <div className="mt-16 flex flex-col gap-4 border-t border-line pt-8 font-body text-xs text-navy-soft md:flex-row md:items-center md:justify-between">
             <span>© {new Date().getFullYear()} Atlas Shop.</span>
             <div className="flex gap-6">
-              <a href="#" className="focus-ring hover:text-navy">Privacy</a>
-              <a href="#" className="focus-ring hover:text-navy">Terms</a>
+              <Link href="/privacy" className="focus-ring hover:text-navy">Privacy</Link>
+              <Link href="/terms" className="focus-ring hover:text-navy">Terms</Link>
             </div>
           </div>
         </div>
