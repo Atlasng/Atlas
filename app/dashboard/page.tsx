@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("All");
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -80,9 +81,15 @@ export default function DashboardPage() {
   const hasShop = Boolean(user?.user_metadata?.has_shop);
 
   const visibleProducts = useMemo(() => {
-    if (activeCategory === "All") return products;
-    return products.filter((p) => p.category === activeCategory);
-  }, [activeCategory]);
+    const term = searchTerm.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesCategory =
+        activeCategory === "All" || p.category === activeCategory;
+      const matchesSearch =
+        term === "" || p.name.toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    });
+  }, [activeCategory, searchTerm]);
 
   if (loading) {
     return (
@@ -101,23 +108,77 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-paper">
       {/* Header */}
       <header className="border-b border-line">
-        <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
+        <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-10">
           <span className="font-display text-2xl tracking-tightest text-navy">
             Atlas
           </span>
-          <button
-            onClick={handleLogout}
-            className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-          >
-            Log out
-          </button>
+
+          <div className="flex flex-1 items-center justify-end gap-4 md:gap-5">
+            <div className="relative w-full max-w-[220px] sm:max-w-xs">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 18 18"
+                fill="none"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-navy-soft"
+              >
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+                <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search products"
+                aria-label="Search products"
+                className="focus-ring w-full border border-line bg-ice py-2 pl-9 pr-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+              />
+            </div>
+
+            <button
+              aria-label="Cart, 0 items"
+              className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path
+                  d="M2 5h2l1.2 8.4a1.5 1.5 0 0 0 1.5 1.3h6.6a1.5 1.5 0 0 0 1.5-1.3L16 6H5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
+                <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
+              </svg>
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+            >
+              Log out
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-content px-6 py-12 md:px-10">
-        <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
-          Welcome back, {name}.
-        </h1>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-ice text-navy-soft">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <circle cx="9" cy="6.2" r="3.2" stroke="currentColor" strokeWidth="1.5" />
+              <path
+                d="M2.8 15.5c.9-3 3.4-4.8 6.2-4.8s5.3 1.8 6.2 4.8"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </div>
+          <span className="font-display text-2xl tracking-tightest text-navy md:text-3xl">
+            {name}
+          </span>
+        </div>
 
         {/* Seller CTA */}
         {hasShop ? (
@@ -237,6 +298,22 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Footer links */}
+        <div className="mt-16 grid grid-cols-2 gap-4 border-t border-line pt-8">
+          <a
+            href="#"
+            className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-navy"
+          >
+            About us
+          </a>
+          <a
+            href="#"
+            className="focus-ring text-right font-body text-sm text-navy-soft transition-colors hover:text-navy"
+          >
+            Contact us
+          </a>
         </div>
       </div>
     </main>
