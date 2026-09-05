@@ -1,16 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
+
+type Product = {
+  id: string;
+  name: string;
+  category: string;
+  price: string;
+  image: string;
+};
+
+const categoryFilters = [
+  "All",
+  "Electronics",
+  "Fashion",
+  "Home & Living",
+  "Beauty & Care",
+  "Groceries",
+  "Sports & Fitness",
+];
+
+const products: Product[] = [
+  { id: "p1", name: "Wireless earbuds", category: "Electronics", price: "₦45,000", image: "https://picsum.photos/seed/atlas-p1/500/500" },
+  { id: "p2", name: "Smart watch", category: "Electronics", price: "₦68,500", image: "https://picsum.photos/seed/atlas-p2/500/500" },
+  { id: "p3", name: "Denim jacket", category: "Fashion", price: "₦22,000", image: "https://picsum.photos/seed/atlas-p3/500/500" },
+  { id: "p4", name: "Leather sneakers", category: "Fashion", price: "₦31,500", image: "https://picsum.photos/seed/atlas-p4/500/500" },
+  { id: "p5", name: "Table lamp", category: "Home & Living", price: "₦12,000", image: "https://picsum.photos/seed/atlas-p5/500/500" },
+  { id: "p6", name: "Throw pillow set", category: "Home & Living", price: "₦9,500", image: "https://picsum.photos/seed/atlas-p6/500/500" },
+  { id: "p7", name: "Shea butter cream", category: "Beauty & Care", price: "₦5,200", image: "https://picsum.photos/seed/atlas-p7/500/500" },
+  { id: "p8", name: "Rice, 5kg bag", category: "Groceries", price: "₦8,900", image: "https://picsum.photos/seed/atlas-p8/500/500" },
+  { id: "p9", name: "Yoga mat", category: "Sports & Fitness", price: "₦14,700", image: "https://picsum.photos/seed/atlas-p9/500/500" },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeCategory, setActiveCategory] = useState("All");
 
   useEffect(() => {
     let active = true;
@@ -46,6 +77,13 @@ export default function DashboardPage() {
     router.replace("/login");
   }
 
+  const hasShop = Boolean(user?.user_metadata?.has_shop);
+
+  const visibleProducts = useMemo(() => {
+    if (activeCategory === "All") return products;
+    return products.filter((p) => p.category === activeCategory);
+  }, [activeCategory]);
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
@@ -61,6 +99,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-paper">
+      {/* Header */}
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
           <Link href="/" className="font-display text-2xl tracking-tightest text-navy">
@@ -75,14 +114,130 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-content px-6 py-16 md:px-10">
+      <div className="mx-auto max-w-content px-6 py-12 md:px-10">
         <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
           Welcome back, {name}.
         </h1>
-        <p className="mt-3 max-w-md font-body text-sm text-navy-soft">
-          This is your dashboard. We'll build out orders, saved items, and
-          account settings here next.
-        </p>
+
+        {/* Seller CTA */}
+        {hasShop ? (
+          <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
+            <div>
+              <p className="font-body text-sm font-medium text-blue-light">
+                Your shop is live
+              </p>
+              <h2 className="mt-1 font-display text-2xl text-white">
+                Manage your listings and orders
+              </h2>
+            </div>
+            <Link
+              href="/dashboard/shop"
+              className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+            >
+              Go to my shop
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
+            <div>
+              <p className="font-body text-sm font-medium text-blue-light">
+                Sell on Atlas
+              </p>
+              <h2 className="mt-1 font-display text-2xl text-white">
+                Open a shop and start listing products
+              </h2>
+              <p className="mt-2 max-w-md font-body text-sm text-white/70">
+                Set up your storefront in minutes and reach every buyer
+                browsing the marketplace below.
+              </p>
+            </div>
+            <Link
+              href="/dashboard/open-shop"
+              className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+            >
+              Open a shop on Atlas
+            </Link>
+          </div>
+        )}
+
+        {/* Marketplace */}
+        <div className="mt-16">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="font-display text-2xl tracking-tightest text-navy">
+              Browse the marketplace
+            </h2>
+            {hasShop && (
+              <Link
+                href="/dashboard/shop/new"
+                className="focus-ring whitespace-nowrap border border-blue px-4 py-2 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+              >
+                + List a product
+              </Link>
+            )}
+          </div>
+
+          {/* Category filter */}
+          <div className="mt-6 flex flex-wrap gap-2.5">
+            {categoryFilters.map((category) => {
+              const isActive = category === activeCategory;
+              return (
+                <button
+                  key={category}
+                  onClick={() => setActiveCategory(category)}
+                  className={`focus-ring whitespace-nowrap border px-4 py-2 font-body text-sm transition-colors ${
+                    isActive
+                      ? "border-blue bg-blue text-white"
+                      : "border-line bg-paper text-navy-soft hover:border-blue hover:text-blue"
+                  }`}
+                >
+                  {category}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Product grid */}
+          {visibleProducts.length === 0 ? (
+            <p className="mt-12 font-body text-sm text-navy-soft">
+              No products in this category yet.
+            </p>
+          ) : (
+            <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+              {visibleProducts.map((product) => (
+                <div
+                  key={product.id}
+                  className="group border border-line bg-paper transition-colors hover:border-blue"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="h-40 w-full object-cover sm:h-48"
+                  />
+                  <div className="p-4">
+                    <p className="font-body text-xs text-navy-soft">
+                      {product.category}
+                    </p>
+                    <h3 className="mt-1 font-display text-base text-navy">
+                      {product.name}
+                    </h3>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="font-body text-sm font-medium text-navy">
+                        {product.price}
+                      </span>
+                      <Link
+                        href={`/product/${product.id}`}
+                        className="focus-ring font-body text-sm font-medium text-blue hover:text-blue-dark"
+                      >
+                        Buy now
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );
