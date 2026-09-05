@@ -88,15 +88,6 @@ export default function Home() {
             ))}
           </nav>
           <div className="flex items-center gap-4 md:gap-5">
-            <button
-              aria-label="Search"
-              className="focus-ring text-navy-soft transition-colors hover:text-navy"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-                <line x1="12.5" y1="12.5" x2="17" y2="17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </button>
             <Link
               href="/login"
               className="focus-ring whitespace-nowrap border border-blue px-4 py-2 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
@@ -109,22 +100,6 @@ export default function Home() {
             >
               Sign up
             </Link>
-            <button
-              aria-label="Cart, 0 items"
-              className="focus-ring text-navy-soft transition-colors hover:text-navy"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path
-                  d="M2 5h2l1.2 8.4a1.5 1.5 0 0 0 1.5 1.3h6.6a1.5 1.5 0 0 0 1.5-1.3L16 6H5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
-                <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
-              </svg>
-            </button>
           </div>
         </div>
       </header>
@@ -156,12 +131,6 @@ export default function Home() {
                 className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
               >
                 Create an account
-              </Link>
-              <Link
-                href="/sell"
-                className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-              >
-                Become a seller
               </Link>
             </div>
           </div>
@@ -265,36 +234,19 @@ export default function Home() {
                 </button>
               </form>
             </div>
-            <div className="grid grid-cols-2 gap-8 md:col-span-7 md:grid-cols-3">
-              <div>
-                <h3 className="font-body text-sm font-medium text-navy">Shop</h3>
-                <ul className="mt-4 space-y-2.5 font-body text-sm text-navy-soft">
-                  {categories.slice(0, 4).map((category) => (
-                    <li key={category.slug}>
-                      <Link href={`/category/${category.slug}`} className="focus-ring hover:text-navy">
-                        {category.name}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-body text-sm font-medium text-navy">Support</h3>
-                <ul className="mt-4 space-y-2.5 font-body text-sm text-navy-soft">
-                  <li><a href="#" className="focus-ring hover:text-navy">Shipping</a></li>
-                  <li><a href="#" className="focus-ring hover:text-navy">Returns</a></li>
-                  <li><a href="#" className="focus-ring hover:text-navy">Track order</a></li>
-                  <li><a href="#" className="focus-ring hover:text-navy">Contact</a></li>
-                </ul>
-              </div>
-              <div>
-                <h3 className="font-body text-sm font-medium text-navy">Account</h3>
-                <ul className="mt-4 space-y-2.5 font-body text-sm text-navy-soft">
-                  <li><Link href="/login" className="focus-ring hover:text-navy">Log in</Link></li>
-                  <li><Link href="/signup" className="focus-ring hover:text-navy">Sign up</Link></li>
-                  <li><a href="#" className="focus-ring hover:text-navy">About Atlas</a></li>
-                </ul>
-              </div>
+            <div className="flex flex-col justify-center gap-4 sm:flex-row md:col-span-7 md:justify-end">
+              <a
+                href="#"
+                className="focus-ring bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+              >
+                Contact us
+              </a>
+              <a
+                href="#"
+                className="focus-ring border border-blue px-6 py-3 text-center font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+              >
+                About us
+              </a>
             </div>
           </div>
           <div className="mt-16 flex flex-col gap-4 border-t border-line pt-8 font-body text-xs text-navy-soft md:flex-row md:items-center md:justify-between">
