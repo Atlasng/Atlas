@@ -18,10 +18,12 @@ const categoryFilters = [
   "All",
   "Electronics",
   "Fashion",
+  "Beauty",
   "Home & Living",
-  "Beauty & Care",
   "Groceries",
-  "Sports & Fitness",
+  "Sports",
+  "Computers",
+  "Automotive",
 ];
 
 const products: Product[] = [];
@@ -35,11 +37,12 @@ function DashboardContent() {
   const initialCategory = categoryFilters.includes(categoryParam ?? "")
     ? (categoryParam as string)
     : "All";
+  const initialSearch = searchParams.get("search") ?? "";
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(initialCategory);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
 
   useEffect(() => {
     let active = true;
