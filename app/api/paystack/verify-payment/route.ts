@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Your payment succeeded, but that store name was just taken by someone else. Contact support to pick a new name.",
+            "Your payment succeeded, but that store name or phone number was just taken by someone else. Contact support to finish setting up your shop.",
         },
         { status: 409 }
       );

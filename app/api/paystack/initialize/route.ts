@@ -51,18 +51,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Defensive re-check — the name could have been taken by someone else
-  // between when this seller checked it and when they hit Pay now.
+  // Defensive re-check — the name or phone could have been taken by
+  // someone else between when this seller checked it and when they hit Pay now.
   const admin = createAdminClient();
-  const { data: existing } = await admin
+  const { data: existingName } = await admin
     .from("shops")
     .select("id")
     .eq("shop_name_normalized", String(shopName).toLowerCase())
     .maybeSingle();
 
-  if (existing) {
+  if (existingName) {
     return NextResponse.json(
       { error: "That store name was just taken. Choose another." },
+      { status: 409 }
+    );
+  }
+
+  const { data: existingPhone } = await admin
+    .from("shops")
+    .select("id")
+    .eq("phone", phone)
+    .maybeSingle();
+
+  if (existingPhone) {
+    return NextResponse.json(
+      { error: "That phone number is already linked to another shop." },
       { status: 409 }
     );
   }

@@ -46,6 +46,8 @@ export default function OpenShopPage() {
   const [category, setCategory] = useState(shopCategories[0]);
   const [checkingName, setCheckingName] = useState(false);
   const [nameAvailable, setNameAvailable] = useState<boolean | null>(null);
+  const [checkingPhone, setCheckingPhone] = useState(false);
+  const [phoneAvailable, setPhoneAvailable] = useState<boolean | null>(null);
 
   // Step 2 — plan + bank match
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -85,19 +87,49 @@ export default function OpenShopPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleCheckName() {
+  // Automatically check store-name availability as the user types.
+  useEffect(() => {
     const name = shopName.trim();
-    if (!name) return;
+    if (!name) {
+      setNameAvailable(null);
+      setCheckingName(false);
+      return;
+    }
     setCheckingName(true);
     setNameAvailable(null);
-    try {
-      const res = await fetch(`/api/shops/check-name?name=${encodeURIComponent(name)}`);
-      const json = await res.json();
-      setNameAvailable(res.ok ? json.available : null);
-    } finally {
-      setCheckingName(false);
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/shops/check-name?name=${encodeURIComponent(name)}`);
+        const json = await res.json();
+        setNameAvailable(res.ok ? json.available : null);
+      } finally {
+        setCheckingName(false);
+      }
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [shopName]);
+
+  // Automatically check phone-number availability as the user types.
+  useEffect(() => {
+    const p = phone.trim();
+    if (!p) {
+      setPhoneAvailable(null);
+      setCheckingPhone(false);
+      return;
     }
-  }
+    setCheckingPhone(true);
+    setPhoneAvailable(null);
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/shops/check-phone?phone=${encodeURIComponent(p)}`);
+        const json = await res.json();
+        setPhoneAvailable(res.ok ? json.available : null);
+      } finally {
+        setCheckingPhone(false);
+      }
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [phone]);
 
   function handleProfileSubmit(e: FormEvent) {
     e.preventDefault();
@@ -113,6 +145,14 @@ export default function OpenShopPage() {
     }
     if (nameAvailable !== true) {
       setError("Check that your store name is available before continuing.");
+      return;
+    }
+    if (checkingPhone) {
+      setError("Still checking your phone number — wait a moment.");
+      return;
+    }
+    if (phoneAvailable === false) {
+      setError("That phone number is already linked to another shop.");
       return;
     }
 
@@ -152,7 +192,7 @@ export default function OpenShopPage() {
       }
 
       setResolvedName(json.accountName);
-      setNameMatches(firstLastNameMatch(firstName, lastName, json.accountName));
+      setNameMatches(firstLastNameMatch(firstName, middleName, lastName, json.accountName));
     } catch {
       setError("Something went wrong checking that account.");
     } finally {
@@ -249,6 +289,16 @@ export default function OpenShopPage() {
             </p>
 
             <form onSubmit={handleProfileSubmit} className="mt-8 space-y-5">
+              <div className="border border-blue bg-ice px-4 py-3">
+                <p className="font-body text-sm text-navy">
+                  <strong>Important:</strong> the bank account you pay with
+                  later must be registered under this exact name, in this
+                  order — first name, then middle name (if any), then last
+                  name. Enter your name below exactly as it appears on your
+                  bank account.
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="firstName" className="font-body text-sm font-medium text-navy">
@@ -337,38 +387,39 @@ export default function OpenShopPage() {
                   placeholder="080..."
                   className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
                 />
+                {checkingPhone && (
+                  <p className="mt-2 font-body text-sm text-navy-soft">Checking availability...</p>
+                )}
+                {!checkingPhone && phoneAvailable === true && (
+                  <p className="mt-2 font-body text-sm text-blue">✓ This number is available.</p>
+                )}
+                {!checkingPhone && phoneAvailable === false && (
+                  <p className="mt-2 font-body text-sm text-red-700">
+                    That number is already linked to another shop.
+                  </p>
+                )}
               </div>
 
               <div className="border-t border-line pt-5">
                 <label htmlFor="shopName" className="font-body text-sm font-medium text-navy">
                   Store name
                 </label>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    id="shopName"
-                    type="text"
-                    required
-                    value={shopName}
-                    onChange={(e) => {
-                      setShopName(e.target.value);
-                      setNameAvailable(null);
-                    }}
-                    placeholder="e.g. Amaka's Electronics"
-                    className="focus-ring flex-1 border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCheckName}
-                    disabled={checkingName || !shopName.trim()}
-                    className="focus-ring whitespace-nowrap border border-blue px-4 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white disabled:opacity-60"
-                  >
-                    {checkingName ? "Checking..." : "Check"}
-                  </button>
-                </div>
-                {nameAvailable === true && (
+                <input
+                  id="shopName"
+                  type="text"
+                  required
+                  value={shopName}
+                  onChange={(e) => setShopName(e.target.value)}
+                  placeholder="e.g. Amaka's Electronics"
+                  className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+                />
+                {checkingName && (
+                  <p className="mt-2 font-body text-sm text-navy-soft">Checking availability...</p>
+                )}
+                {!checkingName && nameAvailable === true && (
                   <p className="mt-2 font-body text-sm text-blue">✓ This name is available.</p>
                 )}
-                {nameAvailable === false && (
+                {!checkingName && nameAvailable === false && (
                   <p className="mt-2 font-body text-sm text-red-700">
                     That name is already taken. Try another.
                   </p>
