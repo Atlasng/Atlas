@@ -8,6 +8,8 @@ const PLAN_AMOUNTS_KOBO: Record<string, number> = {
   professional: 1000000, // ₦10,000
 };
 
+const LEADS_ADDON_KOBO = 3150000; // ₦31,500
+
 export async function POST(request: NextRequest) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
   if (!secretKey) {
@@ -28,6 +30,7 @@ export async function POST(request: NextRequest) {
 
   const {
     plan,
+    leadsAddon,
     shopName,
     description,
     category,
@@ -40,10 +43,11 @@ export async function POST(request: NextRequest) {
     accountName,
   } = await request.json();
 
-  const amount = PLAN_AMOUNTS_KOBO[plan];
-  if (!amount) {
+  const planAmount = PLAN_AMOUNTS_KOBO[plan];
+  if (!planAmount) {
     return NextResponse.json({ error: "Choose a valid plan." }, { status: 400 });
   }
+  const amount = planAmount + (leadsAddon ? LEADS_ADDON_KOBO : 0);
   if (!shopName || !firstName || !lastName) {
     return NextResponse.json(
       { error: "Missing required shop details." },
@@ -95,6 +99,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         user_id: user.id,
         plan,
+        leads_addon: Boolean(leadsAddon),
         shop_name: shopName,
         description,
         category,

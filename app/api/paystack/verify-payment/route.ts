@@ -80,6 +80,7 @@ export async function GET(request: NextRequest) {
     account_name: metadata.account_name || null,
     plan,
     plan_expires_at: expiresAt,
+    leads_addon: Boolean(metadata.leads_addon),
   });
 
   if (error) {

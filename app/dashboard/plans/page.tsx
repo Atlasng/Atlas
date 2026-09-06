@@ -6,12 +6,14 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 type PlanId = "starter" | "business" | "professional";
 
+const LEADS_ADDON_NAIRA = 31500;
+
 const plans: {
   id: PlanId;
   emoji: string;
   name: string;
   blurb: string;
-  price: string;
+  priceNaira: number;
   featured?: boolean;
   features: string[];
 }[] = [
@@ -20,7 +22,7 @@ const plans: {
     emoji: "🟢",
     name: "Starter",
     blurb: "For individuals and small businesses getting started.",
-    price: "₦2,500 / month",
+    priceNaira: 2500,
     features: [
       "Verified Seller profile",
       "Up to 20 active product listings",
@@ -42,7 +44,7 @@ const plans: {
     emoji: "🔵",
     name: "Business",
     blurb: "For growing businesses that need more reach.",
-    price: "₦5,000 / month",
+    priceNaira: 5000,
     featured: true,
     features: [
       "Everything in Starter, plus:",
@@ -67,7 +69,7 @@ const plans: {
     emoji: "🟣",
     name: "Professional",
     blurb: "For established businesses ready to scale.",
-    price: "₦10,000 / month",
+    priceNaira: 10000,
     features: [
       "Everything in Business, plus:",
       "Unlimited product listings",
@@ -123,6 +125,11 @@ function PlansContent() {
 
   const [payingPlan, setPayingPlan] = useState<PlanId | null>(null);
   const [error, setError] = useState("");
+  const [leadsAddon, setLeadsAddon] = useState<Record<PlanId, boolean>>({
+    starter: false,
+    business: false,
+    professional: false,
+  });
 
   useEffect(() => {
     if (!accountName || !shopName || !firstName || !lastName) {
@@ -141,6 +148,7 @@ function PlansContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan,
+          leadsAddon: leadsAddon[plan],
           shopName,
           description,
           category,
@@ -226,7 +234,53 @@ function PlansContent() {
               >
                 {plan.blurb}
               </p>
-              <p className="mt-4 font-display text-2xl">{plan.price}</p>
+              <p className="mt-4 font-display text-2xl">
+                ₦{(plan.priceNaira + (leadsAddon[plan.id] ? LEADS_ADDON_NAIRA : 0)).toLocaleString()}
+                <span
+                  className={`ml-1 font-body text-sm font-normal ${
+                    plan.featured ? "text-white/60" : "text-navy-soft"
+                  }`}
+                >
+                  / month
+                </span>
+              </p>
+
+              <button
+                type="button"
+                role="switch"
+                aria-checked={leadsAddon[plan.id]}
+                onClick={() =>
+                  setLeadsAddon((prev) => ({ ...prev, [plan.id]: !prev[plan.id] }))
+                }
+                className={`focus-ring mt-4 flex items-center gap-3 border px-3 py-2.5 text-left transition-colors ${
+                  plan.featured
+                    ? "border-white/30 bg-white/5"
+                    : "border-line bg-ice"
+                }`}
+              >
+                <span
+                  className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                    leadsAddon[plan.id] ? "bg-blue" : plan.featured ? "bg-white/25" : "bg-line"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
+                      leadsAddon[plan.id] ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+                <span
+                  className={`font-body text-xs leading-snug ${
+                    plan.featured ? "text-white/85" : "text-navy"
+                  }`}
+                >
+                  Allow Atlas to show your shop and bring up to 300 leads
+                  <span className={plan.featured ? "text-white/60" : "text-navy-soft"}>
+                    {" "}
+                    (+₦{LEADS_ADDON_NAIRA.toLocaleString()})
+                  </span>
+                </span>
+              </button>
 
               <ul
                 className={`mt-6 flex-1 space-y-2 font-body text-sm ${
