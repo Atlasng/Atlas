@@ -61,21 +61,36 @@ export async function GET(request: NextRequest) {
 
     const isExpired = daysLeft < 0;
     const planLabel = shop.plan[0].toUpperCase() + shop.plan.slice(1);
+    const renewUrl = `${siteUrl}/dashboard/plans`;
 
     const subject = isExpired
       ? `Your Atlas shop "${shop.shop_name}" plan has expired`
       : `Your Atlas shop "${shop.shop_name}" expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
 
-    const html = isExpired
-      ? `<p>Hi,</p>
-         <p>Your <strong>${planLabel}</strong> plan for <strong>${shop.shop_name}</strong> has expired. Your shop is no longer active on Atlas until you renew.</p>
-         <p><a href="${siteUrl}/dashboard/plans">Renew your plan</a></p>`
-      : `<p>Hi,</p>
-         <p>Your <strong>${planLabel}</strong> plan for <strong>${shop.shop_name}</strong> expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Renew now to keep your shop active without any interruption.</p>
-         <p><a href="${siteUrl}/dashboard/plans">Renew your plan</a></p>`;
+    const message = isExpired
+      ? `Your ${planLabel} plan for ${shop.shop_name} has expired. Your shop is no longer active on Atlas until you renew.`
+      : `Your ${planLabel} plan for ${shop.shop_name} expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}. Renew now to keep your shop active without any interruption.`;
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+        <p style="font-size: 20px; font-weight: bold; color: #0B1E3D; margin-bottom: 4px;">Atlas</p>
+        <p style="font-size: 15px; color: #0B1E3D; line-height: 1.5;">${message}</p>
+        <p style="margin: 28px 0;">
+          <a href="${renewUrl}"
+             style="background-color: #1E56C6; color: #ffffff; text-decoration: none; padding: 14px 28px; font-size: 14px; font-weight: 600; display: inline-block;">
+            Renew your plan
+          </a>
+        </p>
+        <p style="font-size: 13px; color: #4A5C78;">
+          Or copy this link into your browser: ${renewUrl}
+        </p>
+      </div>
+    `;
+
+    const text = `${message}\n\nRenew your plan: ${renewUrl}`;
 
     try {
-      await sendEmail({ to: email, subject, html });
+      await sendEmail({ to: email, subject, html, text });
       await admin
         .from("shops")
         .update({ last_reminder_sent_at: new Date().toISOString() })
