@@ -50,6 +50,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Enforced here, server-side, so it can never be skipped by a page that
+  // forgets its own check, disabled JS, or a direct request to the route —
+  // this is the one place that actually gates every /dashboard/shop/* page.
+  if (user && request.nextUrl.pathname.startsWith("/dashboard/shop")) {
+    const { data: shop } = await supabase
+      .from("shops")
+      .select("plan_expires_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (!shop) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/open-shop";
+      return NextResponse.redirect(url);
+    }
+
+    if (new Date(shop.plan_expires_at) < new Date()) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard/plans";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
 
