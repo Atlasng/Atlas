@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const PLAN_DURATION_DAYS: Record<string, number> = {
-  daily: 1,
-  monthly: 30,
-  yearly: 365,
+  starter: 30,
+  business: 30,
+  professional: 30,
 };
 
 export async function GET(request: NextRequest) {

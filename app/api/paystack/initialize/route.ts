@@ -3,9 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const PLAN_AMOUNTS_KOBO: Record<string, number> = {
-  daily: 300000, // ₦3,000
-  monthly: 4000000, // ₦40,000
-  yearly: 45000000, // ₦450,000
+  starter: 250000, // ₦2,500
+  business: 500000, // ₦5,000
+  professional: 1000000, // ₦10,000
 };
 
 export async function POST(request: NextRequest) {

@@ -7,7 +7,6 @@ import { createClient } from "@/lib/supabase/client";
 import { firstLastNameMatch } from "@/lib/matchName";
 
 type Bank = { name: string; code: string };
-type Plan = "daily" | "monthly" | "yearly";
 
 const shopCategories = [
   "Electronics",
@@ -18,12 +17,6 @@ const shopCategories = [
   "Sports",
   "Computers",
   "Automotive",
-];
-
-const plans: { id: Plan; label: string; price: string; note: string }[] = [
-  { id: "daily", label: "Daily", price: "₦3,000", note: "per day" },
-  { id: "monthly", label: "Monthly", price: "₦40,000", note: "per month" },
-  { id: "yearly", label: "Yearly", price: "₦450,000", note: "per year" },
 ];
 
 export default function OpenShopPage() {
@@ -49,8 +42,7 @@ export default function OpenShopPage() {
   const [checkingPhone, setCheckingPhone] = useState(false);
   const [phoneAvailable, setPhoneAvailable] = useState<boolean | null>(null);
 
-  // Step 2 — plan + bank match
-  const [plan, setPlan] = useState<Plan | null>(null);
+  // Step 2 — identity verification via bank account
   const [banks, setBanks] = useState<Bank[]>([]);
   const [banksLoading, setBanksLoading] = useState(false);
   const [bankCode, setBankCode] = useState("");
@@ -58,7 +50,6 @@ export default function OpenShopPage() {
   const [resolvingAccount, setResolvingAccount] = useState(false);
   const [resolvedName, setResolvedName] = useState("");
   const [nameMatches, setNameMatches] = useState<boolean | null>(null);
-  const [payingNow, setPayingNow] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -200,46 +191,18 @@ export default function OpenShopPage() {
     }
   }
 
-  async function handlePayNow() {
-    if (!plan) {
-      setError("Choose a plan first.");
-      return;
-    }
-    setError("");
-    setPayingNow(true);
-
-    try {
-      const res = await fetch("/api/paystack/initialize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan,
-          shopName,
-          description,
-          category,
-          firstName,
-          middleName,
-          lastName,
-          phone,
-          dob,
-          gender,
-          accountName: resolvedName,
-        }),
-      });
-      const json = await res.json();
-
-      if (!res.ok) {
-        setError(json.error || "Could not start payment.");
-        setPayingNow(false);
-        return;
-      }
-
-      window.location.href = json.authorizationUrl;
-    } catch {
-      setError("Something went wrong starting payment.");
-      setPayingNow(false);
-    }
-  }
+  const plansUrl = `/dashboard/plans?${new URLSearchParams({
+    firstName,
+    middleName,
+    lastName,
+    phone,
+    dob,
+    gender,
+    shopName,
+    description,
+    category,
+    accountName: resolvedName,
+  }).toString()}`;
 
   if (checking) {
     return (
@@ -291,8 +254,8 @@ export default function OpenShopPage() {
             <form onSubmit={handleProfileSubmit} className="mt-8 space-y-5">
               <div className="border border-blue bg-ice px-4 py-3">
                 <p className="font-body text-sm text-navy">
-                  <strong>Important:</strong> the bank account you pay with
-                  later must be registered under this exact name, in this
+                  <strong>Important:</strong> the bank account you verify
+                  next must be registered under this exact name, in this
                   order — first name, then middle name (if any), then last
                   name. Enter your name below exactly as it appears on your
                   bank account.
@@ -468,124 +431,99 @@ export default function OpenShopPage() {
           </>
         )}
 
-        {/* Step 2 — Plan + bank match + pay */}
+        {/* Step 2 — Identity verification via bank account */}
         {step === 2 && (
           <>
             <h1 className="mt-6 font-display text-3xl tracking-tightest text-navy md:text-4xl">
-              Choose a plan
+              Let's verify your name
             </h1>
             <p className="mt-2 font-body text-sm text-navy-soft">
-              Pick how you'd like to pay for your Atlas storefront.
+              Atlas needs to verify your name before you can sell. Once
+              verified, you'll pick your plan and pay — and your sales will
+              always be sent to the account you verify here.
             </p>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {plans.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setPlan(p.id)}
-                  className={`border px-4 py-4 text-left transition-colors ${
-                    plan === p.id
-                      ? "border-blue bg-blue text-white"
-                      : "border-line bg-ice text-navy hover:border-blue"
-                  }`}
+            <form onSubmit={handleResolveAccount} className="mt-8 space-y-4">
+              <div>
+                <label htmlFor="bank" className="font-body text-sm font-medium text-navy">
+                  Bank
+                </label>
+                <select
+                  id="bank"
+                  required
+                  value={bankCode}
+                  onFocus={loadBanks}
+                  onChange={(e) => setBankCode(e.target.value)}
+                  className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
                 >
-                  <p className="font-body text-sm font-medium">{p.label}</p>
-                  <p className="mt-1 font-display text-xl">{p.price}</p>
-                  <p className={`font-body text-xs ${plan === p.id ? "text-white/75" : "text-navy-soft"}`}>
-                    {p.note}
-                  </p>
-                </button>
-              ))}
-            </div>
+                  <option value="">
+                    {banksLoading ? "Loading banks..." : "Select your bank"}
+                  </option>
+                  {banks.map((b) => (
+                    <option key={b.code} value={b.code}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {plan && (
-              <div className="mt-10 border-t border-line pt-8">
-                <h2 className="font-display text-xl text-navy">
-                  Confirm your bank account
-                </h2>
-                <p className="mt-2 font-body text-sm text-navy-soft">
-                  The name on the account you pay with must match your name (
-                  {firstName} {lastName}).
+              <div>
+                <label htmlFor="accountNumber" className="font-body text-sm font-medium text-navy">
+                  Account number
+                </label>
+                <input
+                  id="accountNumber"
+                  type="text"
+                  inputMode="numeric"
+                  required
+                  maxLength={10}
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
+                  className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={resolvingAccount || !bankCode || accountNumber.length !== 10}
+                className="focus-ring w-full border border-blue px-5 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white disabled:opacity-60"
+              >
+                {resolvingAccount ? "Checking account..." : "Confirm account"}
+              </button>
+            </form>
+
+            {resolvedName && nameMatches !== null && !nameMatches && (
+              <div className="mt-4 border border-red-300 bg-red-50 px-4 py-3 font-body text-sm text-red-700">
+                This account is registered to <strong>{resolvedName}</strong>,
+                which doesn't match {firstName} {lastName}. Use an account in
+                your own name.
+              </div>
+            )}
+
+            {nameMatches && (
+              <div className="relative mt-8 flex flex-col items-center overflow-hidden border border-blue bg-navy px-6 py-10 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue">
+                  <svg width="28" height="28" viewBox="0 0 18 18" fill="none">
+                    <path
+                      d="M4 9.5 7.2 12.7 14 5"
+                      stroke="white"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <p className="mt-4 font-display text-2xl text-white">Verified</p>
+                <p className="mt-1 font-body text-sm text-white/75">
+                  {resolvedName}
                 </p>
 
-                <form onSubmit={handleResolveAccount} className="mt-5 space-y-4">
-                  <div>
-                    <label htmlFor="bank" className="font-body text-sm font-medium text-navy">
-                      Bank
-                    </label>
-                    <select
-                      id="bank"
-                      required
-                      value={bankCode}
-                      onFocus={loadBanks}
-                      onChange={(e) => setBankCode(e.target.value)}
-                      className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
-                    >
-                      <option value="">
-                        {banksLoading ? "Loading banks..." : "Select your bank"}
-                      </option>
-                      {banks.map((b) => (
-                        <option key={b.code} value={b.code}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label htmlFor="accountNumber" className="font-body text-sm font-medium text-navy">
-                      Account number
-                    </label>
-                    <input
-                      id="accountNumber"
-                      type="text"
-                      inputMode="numeric"
-                      required
-                      maxLength={10}
-                      value={accountNumber}
-                      onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, ""))}
-                      className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={resolvingAccount || !bankCode || accountNumber.length !== 10}
-                    className="focus-ring w-full border border-blue px-5 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white disabled:opacity-60"
-                  >
-                    {resolvingAccount ? "Checking account..." : "Confirm account"}
-                  </button>
-                </form>
-
-                {resolvedName && nameMatches !== null && (
-                  <div
-                    className={`mt-4 border px-4 py-3 font-body text-sm ${
-                      nameMatches
-                        ? "border-blue bg-ice text-navy"
-                        : "border-red-300 bg-red-50 text-red-700"
-                    }`}
-                  >
-                    {nameMatches ? (
-                      <>✓ {resolvedName} matches your name.</>
-                    ) : (
-                      <>
-                        This account is registered to <strong>{resolvedName}</strong>,
-                        which doesn't match {firstName} {lastName}. Use an account in
-                        your own name.
-                      </>
-                    )}
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={handlePayNow}
-                  disabled={!nameMatches || payingNow}
-                  className="focus-ring mt-6 w-full bg-blue px-5 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+                <Link
+                  href={plansUrl}
+                  className="focus-ring mt-8 w-full max-w-xs bg-blue px-5 py-3.5 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
                 >
-                  {payingNow ? "Redirecting to Paystack..." : "Pay now"}
-                </button>
+                  Start selling
+                </Link>
               </div>
             )}
           </>
