@@ -61,6 +61,11 @@ export default function ShopDashboardPage() {
     );
   }
 
+  const daysLeft = Math.ceil(
+    (new Date(shop.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+  );
+  const expiringSoon = daysLeft <= 5;
+
   return (
     <main className="min-h-screen bg-paper">
       <header className="border-b border-line">
@@ -78,6 +83,21 @@ export default function ShopDashboardPage() {
       </header>
 
       <div className="mx-auto max-w-content px-6 py-12 md:px-10">
+        {expiringSoon && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border border-red-300 bg-red-50 px-4 py-3">
+            <p className="font-body text-sm text-red-700">
+              Your plan expires in {daysLeft} day{daysLeft === 1 ? "" : "s"}.
+              Renew now to keep your shop active.
+            </p>
+            <Link
+              href="/dashboard/plans"
+              className="focus-ring whitespace-nowrap bg-red-700 px-4 py-2 font-body text-sm font-medium text-white transition-colors hover:bg-red-800"
+            >
+              Renew now
+            </Link>
+          </div>
+        )}
+
         <p className="font-body text-sm font-medium text-blue">
           {shop.plan[0].toUpperCase() + shop.plan.slice(1)} plan · renews{" "}
           {new Date(shop.plan_expires_at).toLocaleDateString("en-NG", {

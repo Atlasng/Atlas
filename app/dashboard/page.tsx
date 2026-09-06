@@ -41,6 +41,7 @@ function DashboardContent() {
 
   const [user, setUser] = useState<User | null>(null);
   const [hasShop, setHasShop] = useState(false);
+  const [shopExpiresAt, setShopExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [searchTerm, setSearchTerm] = useState(initialSearch);
@@ -59,12 +60,16 @@ function DashboardContent() {
       if (session?.user) {
         const { data: shop } = await supabase
           .from("shops")
-          .select("id")
+          .select("id, plan_expires_at")
           .eq("user_id", session.user.id)
           .maybeSingle();
-        if (active) setHasShop(Boolean(shop));
+        if (active) {
+          setHasShop(Boolean(shop));
+          setShopExpiresAt(shop?.plan_expires_at ?? null);
+        }
       } else {
         setHasShop(false);
+        setShopExpiresAt(null);
       }
 
       if (active) setLoading(false);
@@ -75,7 +80,10 @@ function DashboardContent() {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null);
-        if (!session) setHasShop(false);
+        if (!session) {
+          setHasShop(false);
+          setShopExpiresAt(null);
+        }
       }
     );
 
@@ -108,6 +116,12 @@ function DashboardContent() {
       </main>
     );
   }
+
+  const daysLeft = shopExpiresAt
+    ? Math.ceil((new Date(shopExpiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const isExpired = daysLeft !== null && daysLeft < 0;
+  const expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 5;
 
   const name =
     (user?.user_metadata?.full_name as string | undefined) ||
@@ -237,17 +251,24 @@ function DashboardContent() {
               <div className="mt-8 flex flex-col justify-between gap-6 border border-line bg-navy p-8 sm:flex-row sm:items-center">
                 <div>
                   <p className="font-body text-sm font-medium text-blue-light">
-                    Your shop is live
+                    {isExpired ? "Plan expired" : "Your shop is live"}
                   </p>
                   <h2 className="mt-1 font-display text-2xl text-white">
-                    Manage your listings and orders
+                    {isExpired
+                      ? "Renew your plan to keep selling"
+                      : "Manage your listings and orders"}
                   </h2>
+                  {expiringSoon && !isExpired && (
+                    <p className="mt-2 max-w-md font-body text-sm text-red-300">
+                      Your plan expires in {daysLeft} day{daysLeft === 1 ? "" : "s"}.
+                    </p>
+                  )}
                 </div>
                 <Link
-                  href="/dashboard/shop"
+                  href={isExpired ? "/dashboard/plans" : "/dashboard/shop"}
                   className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
                 >
-                  Go to my shop
+                  {isExpired ? "Renew now" : "Go to my shop"}
                 </Link>
               </div>
             ) : (
