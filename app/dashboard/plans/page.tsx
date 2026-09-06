@@ -4,9 +4,12 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { createClient } from "@/lib/supabase/client";
+import { PLAN_TIER, LEADS_ADDON_KOBO } from "@/lib/plans";
+
 type PlanId = "starter" | "business" | "professional";
 
-const LEADS_ADDON_NAIRA = 31500;
+const LEADS_ADDON_NAIRA = LEADS_ADDON_KOBO / 100;
 
 const plans: {
   id: PlanId;
@@ -110,6 +113,7 @@ const comparisonRows: [string, string, string, string][] = [
 
 function PlansContent() {
   const router = useRouter();
+  const supabase = createClient();
   const searchParams = useSearchParams();
 
   const firstName = searchParams.get("firstName") || "";
@@ -123,6 +127,10 @@ function PlansContent() {
   const category = searchParams.get("category") || "";
   const accountName = searchParams.get("accountName") || "";
 
+  const [checking, setChecking] = useState(true);
+  const [currentPlan, setCurrentPlan] = useState<PlanId | null>(null);
+  const isRenewal = currentPlan !== null;
+
   const [payingPlan, setPayingPlan] = useState<PlanId | null>(null);
   const [error, setError] = useState("");
   const [leadsAddon, setLeadsAddon] = useState<Record<PlanId, boolean>>({
@@ -132,14 +140,44 @@ function PlansContent() {
   });
 
   useEffect(() => {
-    if (!accountName || !shopName || !firstName || !lastName) {
-      router.replace("/dashboard/open-shop");
-    }
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: shop } = await supabase
+        .from("shops")
+        .select("plan")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (shop) {
+        // Renewal — no onboarding details needed, just enforce no downgrade.
+        setCurrentPlan(shop.plan as PlanId);
+        setChecking(false);
+        return;
+      }
+
+      // New shop — must have arrived here from the open-shop wizard.
+      if (!accountName || !shopName || !firstName || !lastName) {
+        router.replace("/dashboard/open-shop");
+        return;
+      }
+
+      setChecking(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleChoosePlan(plan: PlanId) {
     setError("");
+
+    if (currentPlan && PLAN_TIER[plan] < PLAN_TIER[currentPlan]) {
+      setError("You can't select a lower plan than your current plan.");
+      return;
+    }
+
     setPayingPlan(plan);
 
     try {
@@ -176,6 +214,14 @@ function PlansContent() {
     }
   }
 
+  if (checking) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-ice">
+        <p className="font-body text-sm text-navy-soft">Loading...</p>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-paper">
       <header className="border-b border-line">
@@ -184,7 +230,7 @@ function PlansContent() {
             Atlas
           </span>
           <Link
-            href="/dashboard/open-shop"
+            href={isRenewal ? "/dashboard/shop" : "/dashboard/open-shop"}
             className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
           >
             ← Back
@@ -193,19 +239,25 @@ function PlansContent() {
       </header>
 
       <div className="mx-auto max-w-content px-6 py-16 md:px-10">
-        {accountName && (
+        {isRenewal ? (
           <div className="mb-8 inline-flex items-center gap-2 border border-blue bg-ice px-4 py-2 font-body text-sm text-navy">
-            ✓ Verified as {accountName}
+            Your plan expired — renew to keep selling on Atlas.
           </div>
+        ) : (
+          accountName && (
+            <div className="mb-8 inline-flex items-center gap-2 border border-blue bg-ice px-4 py-2 font-body text-sm text-navy">
+              ✓ Verified as {accountName}
+            </div>
+          )
         )}
 
         <h1 className="font-display text-4xl tracking-tightest text-navy md:text-5xl">
-          Choose Your Atlas Seller Plan
+          {isRenewal ? "Renew Your Atlas Seller Plan" : "Choose Your Atlas Seller Plan"}
         </h1>
         <p className="mt-3 max-w-xl font-body text-base text-navy-soft">
-          Start small. Grow bigger. Reach more customers. Choose the plan
-          that fits your business — your sales will always be sent to the
-          account you just verified.
+          {isRenewal
+            ? "Pick the same plan or upgrade — you can't drop to a lower plan than the one you already have."
+            : "Start small. Grow bigger. Reach more customers. Choose the plan that fits your business — your sales will always be sent to the account you just verified."}
         </p>
 
         {error && <p className="mt-4 font-body text-sm text-red-700">{error}</p>}
@@ -298,19 +350,27 @@ function PlansContent() {
                 ))}
               </ul>
 
-              <button
-                onClick={() => handleChoosePlan(plan.id)}
-                disabled={payingPlan !== null}
-                className={`focus-ring mt-8 px-5 py-3.5 font-body text-sm font-medium transition-colors disabled:opacity-60 ${
-                  plan.featured
-                    ? "bg-blue text-white hover:bg-blue-dark"
-                    : "border border-blue text-blue hover:bg-blue hover:text-white"
-                }`}
-              >
-                {payingPlan === plan.id
-                  ? "Redirecting to Paystack..."
-                  : `Choose ${plan.name}`}
-              </button>
+              {isRenewal && PLAN_TIER[plan.id] < PLAN_TIER[currentPlan!] ? (
+                <p className="mt-8 border border-line bg-ice px-4 py-3 text-center font-body text-sm text-navy-soft">
+                  Not available — your current plan is higher
+                </p>
+              ) : (
+                <button
+                  onClick={() => handleChoosePlan(plan.id)}
+                  disabled={payingPlan !== null}
+                  className={`focus-ring mt-8 px-5 py-3.5 font-body text-sm font-medium transition-colors disabled:opacity-60 ${
+                    plan.featured
+                      ? "bg-blue text-white hover:bg-blue-dark"
+                      : "border border-blue text-blue hover:bg-blue hover:text-white"
+                  }`}
+                >
+                  {payingPlan === plan.id
+                    ? "Redirecting to Paystack..."
+                    : isRenewal && plan.id === currentPlan
+                    ? `Renew ${plan.name}`
+                    : `Choose ${plan.name}`}
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -339,74 +399,13 @@ function PlansContent() {
                     <td className="px-4 py-3">{row[3]}</td>
                   </tr>
                 ))}
-                <tr className="text-navy-soft">
-                  <td className="px-4 py-3 text-navy">Atlas Ads</td>
-                  <td className="px-4 py-3" colSpan={3}>Available separately</td>
-                </tr>
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Atlas Ads */}
-        <div className="mt-20 border-t border-line pt-12">
-          <p className="font-body text-sm font-medium text-blue">📢 Atlas Ads</p>
-          <h2 className="mt-1 font-display text-2xl tracking-tightest text-navy">
-            Put your products in front of more customers.
-          </h2>
-          <p className="mt-2 max-w-xl font-body text-sm text-navy-soft">
-            Use Atlas Ads to promote your products across the marketplace —
-            choose your budget, set a campaign duration, and target relevant
-            shoppers. Track impressions, clicks, and orders generated.
-          </p>
-          <Link
-            href="/ads/new"
-            className="focus-ring mt-6 inline-block border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-          >
-            Create an Ad
-          </Link>
-        </div>
-
-        {/* Boost */}
-        <div className="mt-16 border-t border-line pt-12">
-          <p className="font-body text-sm font-medium text-blue">🚀 Boost Your Products</p>
-          <h2 className="mt-1 font-display text-2xl tracking-tightest text-navy">
-            Need more visibility?
-          </h2>
-          <p className="mt-2 max-w-xl font-body text-sm text-navy-soft">
-            Boost individual products without changing your subscription
-            plan — higher visibility, featured placement, a promotional
-            badge, and campaign performance tracking.
-          </p>
-          <Link
-            href="/boost"
-            className="focus-ring mt-6 inline-block border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-          >
-            Boost a Product
-          </Link>
-        </div>
-
-        {/* Earn */}
-        <div className="mt-16 border-t border-line pt-12">
-          <p className="font-body text-sm font-medium text-blue">💰 Earn More With Atlas</p>
-          <h2 className="mt-1 font-display text-2xl tracking-tightest text-navy">
-            Promote products. Generate sales. Earn.
-          </h2>
-          <p className="mt-2 max-w-xl font-body text-sm text-navy-soft">
-            Eligible promoters can browse available campaigns, choose
-            products to promote, get unique tracking links, and earn
-            commissions on qualifying sales.
-          </p>
-          <Link
-            href="/campaigns"
-            className="focus-ring mt-6 inline-block bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-          >
-            Explore Campaigns
-          </Link>
-        </div>
-
         {/* Verification reminder */}
-        <div className="mt-16 border-t border-line pt-12">
+        <div className="mt-20 border-t border-line pt-12">
           <p className="font-body text-sm font-medium text-blue">
             🛡️ Every Seller Starts With Verification
           </p>

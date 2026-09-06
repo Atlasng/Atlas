@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-const PLAN_AMOUNTS_KOBO: Record<string, number> = {
-  starter: 250000, // ₦2,500
-  business: 500000, // ₦5,000
-  professional: 1000000, // ₦10,000
-};
-
-const LEADS_ADDON_KOBO = 3150000; // ₦31,500
+import { PLAN_AMOUNTS_KOBO, PLAN_TIER, LEADS_ADDON_KOBO, isPlanId } from "@/lib/plans";
 
 export async function POST(request: NextRequest) {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
@@ -43,47 +36,67 @@ export async function POST(request: NextRequest) {
     accountName,
   } = await request.json();
 
-  const planAmount = PLAN_AMOUNTS_KOBO[plan];
-  if (!planAmount) {
+  if (!isPlanId(plan)) {
     return NextResponse.json({ error: "Choose a valid plan." }, { status: 400 });
   }
-  const amount = planAmount + (leadsAddon ? LEADS_ADDON_KOBO : 0);
-  if (!shopName || !firstName || !lastName) {
-    return NextResponse.json(
-      { error: "Missing required shop details." },
-      { status: 400 }
-    );
-  }
 
-  // Defensive re-check — the name or phone could have been taken by
-  // someone else between when this seller checked it and when they hit Pay now.
   const admin = createAdminClient();
-  const { data: existingName } = await admin
+  const { data: existingShop } = await admin
     .from("shops")
-    .select("id")
-    .eq("shop_name_normalized", String(shopName).toLowerCase())
+    .select("plan")
+    .eq("user_id", user.id)
     .maybeSingle();
 
-  if (existingName) {
-    return NextResponse.json(
-      { error: "That store name was just taken. Choose another." },
-      { status: 409 }
-    );
+  const isRenewal = Boolean(existingShop);
+
+  if (isRenewal) {
+    // Renewal — no new-shop details needed, just block downgrades.
+    if (PLAN_TIER[plan] < PLAN_TIER[existingShop!.plan as keyof typeof PLAN_TIER]) {
+      return NextResponse.json(
+        {
+          error:
+            "You can't select a lower plan than your current plan. Choose the same plan or higher to renew.",
+        },
+        { status: 400 }
+      );
+    }
+  } else {
+    // New shop — require onboarding details and re-check availability.
+    if (!shopName || !firstName || !lastName) {
+      return NextResponse.json(
+        { error: "Missing required shop details." },
+        { status: 400 }
+      );
+    }
+
+    const { data: existingName } = await admin
+      .from("shops")
+      .select("id")
+      .eq("shop_name_normalized", String(shopName).toLowerCase())
+      .maybeSingle();
+
+    if (existingName) {
+      return NextResponse.json(
+        { error: "That store name was just taken. Choose another." },
+        { status: 409 }
+      );
+    }
+
+    const { data: existingPhone } = await admin
+      .from("shops")
+      .select("id")
+      .eq("phone", phone)
+      .maybeSingle();
+
+    if (existingPhone) {
+      return NextResponse.json(
+        { error: "That phone number is already linked to another shop." },
+        { status: 409 }
+      );
+    }
   }
 
-  const { data: existingPhone } = await admin
-    .from("shops")
-    .select("id")
-    .eq("phone", phone)
-    .maybeSingle();
-
-  if (existingPhone) {
-    return NextResponse.json(
-      { error: "That phone number is already linked to another shop." },
-      { status: 409 }
-    );
-  }
-
+  const amount = PLAN_AMOUNTS_KOBO[plan] + (leadsAddon ? LEADS_ADDON_KOBO : 0);
   const callbackUrl = `${request.nextUrl.origin}/dashboard/open-shop/callback`;
 
   const res = await fetch("https://api.paystack.co/transaction/initialize", {
@@ -100,6 +113,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         plan,
         leads_addon: Boolean(leadsAddon),
+        is_renewal: isRenewal,
         shop_name: shopName,
         description,
         category,

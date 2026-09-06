@@ -42,6 +42,11 @@ export default function ShopDashboardPage() {
         return;
       }
 
+      if (new Date(data.plan_expires_at) < new Date()) {
+        router.replace("/dashboard/plans");
+        return;
+      }
+
       setShop(data);
       setLoading(false);
     });
