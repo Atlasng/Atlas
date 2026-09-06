@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { User } from "@supabase/supabase-js";
+
+type Shop = {
+  shop_name: string;
+  plan: string;
+  plan_expires_at: string;
+};
 
 const stats = [
   { label: "Total revenue", value: "₦0" },
@@ -16,38 +21,40 @@ const stats = [
 export default function ShopDashboardPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [user, setUser] = useState<User | null>(null);
+  const [shop, setShop] = useState<Shop | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         router.replace("/login");
         return;
       }
-      if (!session.user.user_metadata?.has_shop) {
+
+      const { data } = await supabase
+        .from("shops")
+        .select("shop_name, plan, plan_expires_at")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!data) {
         router.replace("/dashboard/open-shop");
         return;
       }
-      setUser(session.user);
+
+      setShop(data);
       setLoading(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading) {
+  if (loading || !shop) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
         <p className="font-body text-sm text-navy-soft">Loading...</p>
       </main>
     );
   }
-
-  const shopName = (user?.user_metadata?.shop_name as string) || "Your shop";
-  const plan = (user?.user_metadata?.shop_plan as string) || "—";
-  const expiresAt = user?.user_metadata?.shop_plan_expires_at as
-    | string
-    | undefined;
 
   return (
     <main className="min-h-screen bg-paper">
@@ -67,16 +74,15 @@ export default function ShopDashboardPage() {
 
       <div className="mx-auto max-w-content px-6 py-12 md:px-10">
         <p className="font-body text-sm font-medium text-blue">
-          {plan !== "—" ? `${plan[0].toUpperCase()}${plan.slice(1)} plan` : ""}
-          {expiresAt &&
-            ` · renews ${new Date(expiresAt).toLocaleDateString("en-NG", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}`}
+          {shop.plan[0].toUpperCase() + shop.plan.slice(1)} plan · renews{" "}
+          {new Date(shop.plan_expires_at).toLocaleDateString("en-NG", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })}
         </p>
         <h1 className="mt-1 font-display text-3xl tracking-tightest text-navy md:text-4xl">
-          {shopName}
+          {shop.shop_name}
         </h1>
 
         <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-4">

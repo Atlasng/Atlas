@@ -1,23 +1,24 @@
-function normalize(name: string): string[] {
-  return name
+function normalizeWord(word: string): string {
+  return word.toLowerCase().replace(/[^a-z]/g, "");
+}
+
+// First name AND last name must each appear as a whole word in the bank
+// account name. Middle name is intentionally not checked — not compulsory.
+export function firstLastNameMatch(
+  firstName: string,
+  lastName: string,
+  accountName: string
+): boolean {
+  const accountWords = accountName
     .toLowerCase()
     .replace(/[^a-z\s]/g, "")
     .split(/\s+/)
     .filter(Boolean);
-}
 
-// Loose match: true if most of the significant words in one name show up
-// in the other. Tolerant of middle names, reordering, and minor typos in
-// spacing, since bank account names and NIN records are rarely formatted
-// identically.
-export function namesLikelyMatch(a: string, b: string): boolean {
-  const wordsA = normalize(a);
-  const wordsB = normalize(b);
-  if (wordsA.length === 0 || wordsB.length === 0) return false;
+  const first = normalizeWord(firstName);
+  const last = normalizeWord(lastName);
 
-  const setB = new Set(wordsB);
-  const overlap = wordsA.filter((w) => setB.has(w)).length;
-  const smaller = Math.min(wordsA.length, wordsB.length);
+  if (!first || !last) return false;
 
-  return overlap >= Math.max(2, Math.ceil(smaller * 0.6));
+  return accountWords.includes(first) && accountWords.includes(last);
 }

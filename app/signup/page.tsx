@@ -20,7 +20,7 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -32,6 +32,14 @@ export default function SignupPage() {
 
     if (error) {
       setError(error.message);
+      return;
+    }
+
+    // Supabase returns a "phantom" user with an empty identities array
+    // instead of an error when the email is already registered, to avoid
+    // leaking which emails exist. This is the documented way to detect it.
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      setError("An account with this email already exists. Try logging in instead.");
       return;
     }
 

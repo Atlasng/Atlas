@@ -40,6 +40,7 @@ function DashboardContent() {
   const initialSearch = searchParams.get("search") ?? "";
 
   const [user, setUser] = useState<User | null>(null);
+  const [hasShop, setHasShop] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [searchTerm, setSearchTerm] = useState(initialSearch);
@@ -47,15 +48,34 @@ function DashboardContent() {
   useEffect(() => {
     let active = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function loadUserAndShop() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!active) return;
+
       setUser(session?.user ?? null);
-      setLoading(false);
-    });
+
+      if (session?.user) {
+        const { data: shop } = await supabase
+          .from("shops")
+          .select("id")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        if (active) setHasShop(Boolean(shop));
+      } else {
+        setHasShop(false);
+      }
+
+      if (active) setLoading(false);
+    }
+
+    loadUserAndShop();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null);
+        if (!session) setHasShop(false);
       }
     );
 
@@ -69,8 +89,6 @@ function DashboardContent() {
     await supabase.auth.signOut();
     router.replace("/login");
   }
-
-  const hasShop = Boolean(user?.user_metadata?.has_shop);
 
   const visibleProducts = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();

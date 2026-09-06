@@ -62,22 +62,39 @@ export async function GET(request: NextRequest) {
     Date.now() + days * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  // Written with the service-role client, not the user's own session —
-  // has_shop and the active plan must not be writable by the client SDK,
-  // or a seller could just flip the flag on themselves without paying.
+  // Written with the service-role client, not the user's own session — a
+  // shop must not be creatable by the client SDK, or a seller could just
+  // insert a row for themselves without ever paying.
   const admin = createAdminClient();
-  const { error } = await admin.auth.admin.updateUserById(user.id, {
-    user_metadata: {
-      ...user.user_metadata,
-      has_shop: true,
-      shop_plan: plan,
-      shop_plan_expires_at: expiresAt,
-      kyc_verified_name: metadata.verified_name,
-      kyc_status: "verified",
-    },
+  const { error } = await admin.from("shops").insert({
+    user_id: user.id,
+    shop_name: metadata.shop_name,
+    description: metadata.description || null,
+    category: metadata.category || null,
+    first_name: metadata.first_name,
+    middle_name: metadata.middle_name || null,
+    last_name: metadata.last_name,
+    phone: metadata.phone || null,
+    date_of_birth: metadata.dob || null,
+    gender: metadata.gender || null,
+    account_name: metadata.account_name || null,
+    plan,
+    plan_expires_at: expiresAt,
   });
 
   if (error) {
+    // Unique violation on the shop name — extremely unlikely (already
+    // re-checked at initialize time) but possible if two people paid for
+    // the same name within seconds of each other.
+    if (error.code === "23505") {
+      return NextResponse.json(
+        {
+          error:
+            "Your payment succeeded, but that store name was just taken by someone else. Contact support to pick a new name.",
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
