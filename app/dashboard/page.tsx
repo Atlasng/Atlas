@@ -10,8 +10,8 @@ type Product = {
   id: string;
   name: string;
   category: string;
-  price: string;
-  image: string;
+  price: number;
+  images: string[];
 };
 
 const categoryFilters = [
@@ -24,9 +24,8 @@ const categoryFilters = [
   "Sports",
   "Computers",
   "Automotive",
+  "Digital Products",
 ];
-
-const products: Product[] = [];
 
 function DashboardContent() {
   const router = useRouter();
@@ -43,8 +42,28 @@ function DashboardContent() {
   const [hasShop, setHasShop] = useState(false);
   const [shopExpiresAt, setShopExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState(initialCategory);
   const [searchTerm, setSearchTerm] = useState(initialSearch);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase
+      .from("products")
+      .select("id, name, category, price, images")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (!active) return;
+        setProducts((data as Product[]) ?? []);
+        setProductsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [supabase]);
 
   useEffect(() => {
     let active = true;
@@ -333,20 +352,23 @@ function DashboardContent() {
           </div>
 
           {/* Product grid */}
-          {visibleProducts.length === 0 ? (
+          {productsLoading ? (
+            <p className="mt-12 font-body text-sm text-navy-soft">Loading products...</p>
+          ) : visibleProducts.length === 0 ? (
             <p className="mt-12 font-body text-sm text-navy-soft">
               No products listed yet. Check back soon.
             </p>
           ) : (
             <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
               {visibleProducts.map((product) => (
-                <div
+                <Link
                   key={product.id}
-                  className="group border border-line bg-paper transition-colors hover:border-blue"
+                  href={`/product/${product.id}`}
+                  className="group block border border-line bg-paper transition-colors hover:border-blue"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={product.image}
+                    src={product.images[0]}
                     alt={product.name}
                     className="h-40 w-full object-cover sm:h-48"
                   />
@@ -359,17 +381,14 @@ function DashboardContent() {
                     </h3>
                     <div className="mt-3 flex items-center justify-between">
                       <span className="font-body text-sm font-medium text-navy">
-                        {product.price}
+                        ₦{product.price.toLocaleString()}
                       </span>
-                      <Link
-                        href={`/product/${product.id}`}
-                        className="focus-ring font-body text-sm font-medium text-blue hover:text-blue-dark"
-                      >
-                        Buy now
-                      </Link>
+                      <span className="font-body text-sm font-medium text-blue">
+                        View
+                      </span>
                     </div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}

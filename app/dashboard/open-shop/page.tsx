@@ -17,6 +17,7 @@ const shopCategories = [
   "Sports",
   "Computers",
   "Automotive",
+  "Digital Products",
 ];
 
 export default function OpenShopPage() {

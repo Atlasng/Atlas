@@ -26,6 +26,7 @@ const categories: Category[] = [
   { name: "Sports", blurb: "Fitness, football & sports equipment", image: "https://picsum.photos/seed/atlas-sports/700/560" },
   { name: "Computers", blurb: "Laptops, accessories & computer equipment", image: "https://picsum.photos/seed/atlas-computers/700/560" },
   { name: "Automotive", blurb: "Cars, parts & accessories", image: "https://picsum.photos/seed/atlas-automotive/700/560" },
+  { name: "Digital Products", blurb: "Ebooks, courses & digital downloads", image: "https://picsum.photos/seed/atlas-digital/700/560" },
 ];
 
 const confidenceItems = [
