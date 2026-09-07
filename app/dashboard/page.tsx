@@ -12,7 +12,7 @@ type Product = {
   category: string;
   price: number;
   images: string[];
-  shops: { shop_name: string } | null;
+  shop_name: string | null;
 };
 
 const categoryFilters = [
@@ -53,7 +53,7 @@ function DashboardContent() {
 
     supabase
       .from("products")
-      .select("id, name, category, price, images, shops(shop_name)")
+      .select("id, name, category, price, images, shop_name")
       .then(({ data }) => {
         if (!active) return;
         const list = (data as unknown as Product[]) ?? [];
@@ -202,6 +202,15 @@ function DashboardContent() {
                 <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
               </svg>
             </Link>
+
+            {user && (
+              <Link
+                href="/orders"
+                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+              >
+                My orders
+              </Link>
+            )}
 
             {user ? (
               <button
@@ -386,9 +395,9 @@ function DashboardContent() {
                     <h3 className="mt-1 font-display text-base text-navy">
                       {product.name}
                     </h3>
-                    {product.shops?.shop_name && (
+                    {product.shop_name && (
                       <p className="font-body text-xs text-navy-soft">
-                        {product.shops.shop_name}
+                        {product.shop_name}
                       </p>
                     )}
                     <div className="mt-3 flex items-center justify-between">

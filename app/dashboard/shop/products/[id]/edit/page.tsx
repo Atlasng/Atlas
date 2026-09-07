@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, FormEvent } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 const MAX_IMAGES = 5;
@@ -21,36 +21,40 @@ const productCategories = [
   "Digital Products",
 ];
 
-type PickedImage = {
-  file: File;
-  previewUrl: string;
-};
+type NewImage = { file: File; previewUrl: string };
 
-export default function NewProductPage() {
+export default function EditProductPage() {
+  const params = useParams();
   const router = useRouter();
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const id = params.id as string;
 
   const [checking, setChecking] = useState(true);
-  const [shopId, setShopId] = useState<string | null>(null);
-  const [shopName, setShopName] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState(productCategories[0]);
-  const [images, setImages] = useState<PickedImage[]>([]);
-  const [digitalFile, setDigitalFile] = useState<File | null>(null);
   const [size, setSize] = useState("");
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<NewImage[]>([]);
+  const [existingDigitalFilePath, setExistingDigitalFilePath] = useState<string | null>(null);
+  const [newDigitalFile, setNewDigitalFile] = useState<File | null>(null);
   const [error, setError] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const isDigitalProduct = category === "Digital Products";
   const isFashion = category === "Fashion";
+  const isDigitalProduct = category === "Digital Products";
+  const totalImageCount = existingImages.length + newImages.length;
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    async function load() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (!session) {
         router.replace("/login");
         return;
@@ -58,7 +62,7 @@ export default function NewProductPage() {
 
       const { data: shop } = await supabase
         .from("shops")
-        .select("id, shop_name")
+        .select("id")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
@@ -67,25 +71,43 @@ export default function NewProductPage() {
         return;
       }
 
-      setShopId(shop.id);
-      setShopName(shop.shop_name);
+      const { data: product } = await supabase
+        .from("products")
+        .select("name, description, price, category, images, size, shop_id, digital_file_path")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (!product || product.shop_id !== shop.id) {
+        setNotFound(true);
+        setChecking(false);
+        return;
+      }
+
+      setName(product.name);
+      setDescription(product.description ?? "");
+      setPrice(String(product.price));
+      setCategory(product.category);
+      setSize(product.size ?? "");
+      setExistingImages(product.images ?? []);
+      setExistingDigitalFilePath(product.digital_file_path ?? null);
       setChecking(false);
-    });
+    }
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [id]);
 
   function handleFilesSelected(fileList: FileList | null) {
     if (!fileList) return;
     setError("");
 
     const incoming = Array.from(fileList);
-    const room = MAX_IMAGES - images.length;
+    const room = MAX_IMAGES - totalImageCount;
 
     if (incoming.length > room) {
-      setError(`You can only add ${MAX_IMAGES} images total.`);
+      setError(`You can only have ${MAX_IMAGES} images total.`);
     }
 
-    const accepted: PickedImage[] = [];
+    const accepted: NewImage[] = [];
     for (const file of incoming.slice(0, room)) {
       if (!file.type.startsWith("image/")) {
         setError(`${file.name} isn't an image.`);
@@ -98,13 +120,16 @@ export default function NewProductPage() {
       accepted.push({ file, previewUrl: URL.createObjectURL(file) });
     }
 
-    setImages((prev) => [...prev, ...accepted]);
-
+    setNewImages((prev) => [...prev, ...accepted]);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function removeImage(index: number) {
-    setImages((prev) => {
+  function removeExisting(index: number) {
+    setExistingImages((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function removeNew(index: number) {
+    setNewImages((prev) => {
       const next = [...prev];
       URL.revokeObjectURL(next[index].previewUrl);
       next.splice(index, 1);
@@ -115,8 +140,8 @@ export default function NewProductPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    setSaved(false);
 
-    if (!shopId) return;
     if (!name.trim()) {
       setError("Give your product a name.");
       return;
@@ -126,20 +151,20 @@ export default function NewProductPage() {
       setError("Enter a valid price.");
       return;
     }
-    if (images.length === 0) {
-      setError("Add at least one photo.");
-      return;
-    }
-    if (isDigitalProduct && !digitalFile) {
-      setError("Add the file buyers will download after paying.");
+    if (totalImageCount === 0) {
+      setError("Keep at least one photo.");
       return;
     }
     if (isFashion && !size.trim()) {
       setError("Enter a size.");
       return;
     }
+    if (isDigitalProduct && !existingDigitalFilePath && !newDigitalFile) {
+      setError("Add the file buyers will download after paying.");
+      return;
+    }
 
-    setSubmitting(true);
+    setSaving(true);
 
     try {
       const {
@@ -150,11 +175,9 @@ export default function NewProductPage() {
         return;
       }
 
-      const imageUrls: string[] = [];
-
-      for (let i = 0; i < images.length; i++) {
-        setUploadStatus(`Uploading photo ${i + 1} of ${images.length}...`);
-        const { file } = images[i];
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < newImages.length; i++) {
+        const { file } = newImages[i];
         const ext = file.name.split(".").pop() || "jpg";
         const path = `${user.id}/${Date.now()}-${i}.${ext}`;
 
@@ -170,49 +193,52 @@ export default function NewProductPage() {
           .from("product-images")
           .getPublicUrl(path);
 
-        imageUrls.push(publicUrlData.publicUrl);
+        uploadedUrls.push(publicUrlData.publicUrl);
       }
 
-      let digitalFilePath: string | null = null;
-      if (isDigitalProduct && digitalFile) {
-        setUploadStatus("Uploading file...");
-        const ext = digitalFile.name.split(".").pop() || "bin";
+      let digitalFilePath = existingDigitalFilePath;
+      if (isDigitalProduct && newDigitalFile) {
+        const ext = newDigitalFile.name.split(".").pop() || "bin";
         const path = `${user.id}/${Date.now()}.${ext}`;
 
         const { error: fileError } = await supabase.storage
           .from("digital-files")
-          .upload(path, digitalFile, { contentType: digitalFile.type });
+          .upload(path, newDigitalFile, { contentType: newDigitalFile.type });
 
         if (fileError) {
-          throw new Error(`Couldn't upload ${digitalFile.name}: ${fileError.message}`);
+          throw new Error(`Couldn't upload ${newDigitalFile.name}: ${fileError.message}`);
         }
 
         digitalFilePath = path;
       }
 
-      setUploadStatus("Saving product...");
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({
+          name: name.trim(),
+          description: description.trim() || null,
+          price: priceNumber,
+          category,
+          size: isFashion ? size.trim() : null,
+          images: [...existingImages, ...uploadedUrls],
+          digital_file_path: isDigitalProduct ? digitalFilePath : null,
+        })
+        .eq("id", id);
 
-      const { error: insertError } = await supabase.from("products").insert({
-        shop_id: shopId,
-        shop_name: shopName,
-        name: name.trim(),
-        description: description.trim() || null,
-        price: priceNumber,
-        category,
-        images: imageUrls,
-        digital_file_path: digitalFilePath,
-        size: isFashion ? size.trim() : null,
-      });
-
-      if (insertError) {
-        throw new Error(insertError.message);
+      if (updateError) {
+        throw new Error(updateError.message);
       }
 
-      router.push("/dashboard/shop");
+      setNewImages([]);
+      setExistingImages([...existingImages, ...uploadedUrls]);
+      setExistingDigitalFilePath(digitalFilePath);
+      setNewDigitalFile(null);
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
-      setSubmitting(false);
-      setUploadStatus("");
+      setSaving(false);
     }
   }
 
@@ -220,6 +246,22 @@ export default function NewProductPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
         <p className="font-body text-sm text-navy-soft">Loading...</p>
+      </main>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ice px-6 text-center">
+        <p className="font-body text-sm text-navy-soft">
+          Product not found, or it doesn't belong to your shop.
+        </p>
+        <Link
+          href="/dashboard/shop/products"
+          className="focus-ring bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+        >
+          Back to my products
+        </Link>
       </main>
     );
   }
@@ -232,40 +274,51 @@ export default function NewProductPage() {
             Atlas
           </span>
           <Link
-            href="/dashboard/shop"
+            href="/dashboard/shop/products"
             className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
           >
-            ← Back to my shop
+            ← Back to my products
           </Link>
         </div>
       </header>
 
       <div className="mx-auto max-w-xl px-6 py-16 md:px-10">
         <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
-          List a product
+          Edit product
         </h1>
-        <p className="mt-2 font-body text-sm text-navy-soft">
-          Up to {MAX_IMAGES} photos, 10MB max each.
-        </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-5">
           <div>
             <label className="font-body text-sm font-medium text-navy">
-              Photos ({images.length}/{MAX_IMAGES})
+              Photos ({totalImageCount}/{MAX_IMAGES})
             </label>
 
             <div className="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-5">
-              {images.map((img, i) => (
+              {existingImages.map((src, i) => (
+                <div key={src} className="group relative aspect-square border border-line">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeExisting(i)}
+                    aria-label="Remove photo"
+                    className="focus-ring absolute right-1 top-1 flex h-6 w-6 items-center justify-center bg-navy/80 text-white"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {newImages.map((img, i) => (
                 <div key={img.previewUrl} className="group relative aspect-square border border-line">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={img.previewUrl}
-                    alt={`Photo ${i + 1}`}
+                    alt={`New photo ${i + 1}`}
                     className="h-full w-full object-cover"
                   />
                   <button
                     type="button"
-                    onClick={() => removeImage(i)}
+                    onClick={() => removeNew(i)}
                     aria-label="Remove photo"
                     className="focus-ring absolute right-1 top-1 flex h-6 w-6 items-center justify-center bg-navy/80 text-white"
                   >
@@ -274,7 +327,7 @@ export default function NewProductPage() {
                 </div>
               ))}
 
-              {images.length < MAX_IMAGES && (
+              {totalImageCount < MAX_IMAGES && (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -363,29 +416,35 @@ export default function NewProductPage() {
               <label htmlFor="digitalFile" className="font-body text-sm font-medium text-navy">
                 File buyers download after paying
               </label>
+              {existingDigitalFilePath && !newDigitalFile && (
+                <p className="mt-1 font-body text-xs text-navy">
+                  Current file: {existingDigitalFilePath.split("/").pop()}
+                </p>
+              )}
               <p className="mt-1 font-body text-xs text-navy-soft">
-                Video, PDF, ZIP, or similar — up to 200MB.
+                {existingDigitalFilePath
+                  ? "Choose a new file only if you want to replace it."
+                  : "Video, PDF, ZIP, or similar — up to 200MB."}
               </p>
               <input
                 id="digitalFile"
                 type="file"
-                required
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null;
                   if (file && file.size > MAX_DIGITAL_FILE_BYTES) {
                     setError(`${file.name} is over 200MB.`);
                     e.target.value = "";
-                    setDigitalFile(null);
+                    setNewDigitalFile(null);
                     return;
                   }
                   setError("");
-                  setDigitalFile(file);
+                  setNewDigitalFile(file);
                 }}
                 className="focus-ring mt-3 w-full font-body text-sm text-navy"
               />
-              {digitalFile && (
+              {newDigitalFile && (
                 <p className="mt-2 font-body text-xs text-navy">
-                  Selected: {digitalFile.name} ({Math.round(digitalFile.size / 1024 / 1024)}MB)
+                  Replacing with: {newDigitalFile.name} ({Math.round(newDigitalFile.size / 1024 / 1024)}MB)
                 </p>
               )}
             </div>
@@ -412,10 +471,10 @@ export default function NewProductPage() {
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={saving}
             className="focus-ring w-full bg-blue px-5 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
           >
-            {submitting ? uploadStatus || "Saving..." : "List product"}
+            {saving ? "Saving..." : saved ? "✓ Saved" : "Save changes"}
           </button>
         </form>
       </div>

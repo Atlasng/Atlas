@@ -14,7 +14,7 @@ type CartItem = {
     price: number;
     category: string;
     images: string[];
-    shops: { shop_name: string } | null;
+    shop_name: string | null;
   } | null;
 };
 
@@ -40,7 +40,7 @@ export default function CartPage() {
     const { data } = await supabase
       .from("cart_items")
       .select(
-        "id, quantity, products(id, name, price, category, images, shops(shop_name))"
+        "id, quantity, products(id, name, price, category, images, shop_name)"
       )
       .eq("user_id", session.user.id);
 
@@ -114,9 +114,9 @@ export default function CartPage() {
         <div className="flex flex-1 flex-col justify-between">
           <div>
             <h3 className="font-display text-base text-navy">{product.name}</h3>
-            {product.shops?.shop_name && (
+            {product.shop_name && (
               <p className="font-body text-xs text-navy-soft">
-                Sold by {product.shops.shop_name}
+                Sold by {product.shop_name}
               </p>
             )}
           </div>
