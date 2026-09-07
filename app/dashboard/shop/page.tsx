@@ -128,6 +128,12 @@ export default function ShopDashboardPage() {
           >
             + List a product
           </Link>
+          <Link
+            href="/dashboard/shop/products"
+            className="focus-ring border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+          >
+            View my products
+          </Link>
         </div>
 
         <p className="mt-16 max-w-md font-body text-sm text-navy-soft">

@@ -12,6 +12,7 @@ type Product = {
   category: string;
   price: number;
   images: string[];
+  shops: { shop_name: string } | null;
 };
 
 const categoryFilters = [
@@ -52,10 +53,10 @@ function DashboardContent() {
 
     supabase
       .from("products")
-      .select("id, name, category, price, images")
+      .select("id, name, category, price, images, shops(shop_name)")
       .then(({ data }) => {
         if (!active) return;
-        const list = (data as Product[]) ?? [];
+        const list = (data as unknown as Product[]) ?? [];
         // Fisher-Yates shuffle — random order each time the page loads,
         // instead of always showing the same newest-first order.
         for (let i = list.length - 1; i > 0; i--) {
@@ -385,6 +386,11 @@ function DashboardContent() {
                     <h3 className="mt-1 font-display text-base text-navy">
                       {product.name}
                     </h3>
+                    {product.shops?.shop_name && (
+                      <p className="font-body text-xs text-navy-soft">
+                        {product.shops.shop_name}
+                      </p>
+                    )}
                     <div className="mt-3 flex items-center justify-between">
                       <span className="font-body text-sm font-medium text-navy">
                         ₦{product.price.toLocaleString()}

@@ -1,57 +1,220 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
-type Product = {
-  id: string;
-  name: string;
-  description: string | null;
-  price: number;
-  category: string;
-  images: string[];
-  size: string | null;
-  digital_file_path: string | null;
-  shops: { shop_name: string } | null;
-};
+const MAX_IMAGES = 5;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 
-export default function ProductPage() {
+const productCategories = [
+  "Electronics",
+  "Fashion",
+  "Beauty",
+  "Home & Living",
+  "Groceries",
+  "Sports",
+  "Computers",
+  "Automotive",
+  "Digital Products",
+];
+
+type NewImage = { file: File; previewUrl: string };
+
+export default function EditProductPage() {
   const params = useParams();
   const router = useRouter();
   const supabase = createClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const id = params.id as string;
 
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [category, setCategory] = useState(productCategories[0]);
+  const [size, setSize] = useState("");
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<NewImage[]>([]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const isFashion = category === "Fashion";
+  const totalImageCount = existingImages.length + newImages.length;
 
   useEffect(() => {
-    supabase
-      .from("products")
-      .select("id, name, description, price, category, images, size, digital_file_path, shops(shop_name)")
-      .eq("id", id)
-      .maybeSingle()
-      .then(({ data }) => {
-        setProduct(data as unknown as Product);
-        setLoading(false);
-      });
+    async function load() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
+
+      const { data: shop } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
+
+      if (!shop) {
+        router.replace("/dashboard/open-shop");
+        return;
+      }
+
+      const { data: product } = await supabase
+        .from("products")
+        .select("name, description, price, category, images, size, shop_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (!product || product.shop_id !== shop.id) {
+        setNotFound(true);
+        setChecking(false);
+        return;
+      }
+
+      setName(product.name);
+      setDescription(product.description ?? "");
+      setPrice(String(product.price));
+      setCategory(product.category);
+      setSize(product.size ?? "");
+      setExistingImages(product.images ?? []);
+      setChecking(false);
+    }
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  function showPrev() {
-    if (!product) return;
-    setActiveIndex((i) => (i === 0 ? product.images.length - 1 : i - 1));
+  function handleFilesSelected(fileList: FileList | null) {
+    if (!fileList) return;
+    setError("");
+
+    const incoming = Array.from(fileList);
+    const room = MAX_IMAGES - totalImageCount;
+
+    if (incoming.length > room) {
+      setError(`You can only have ${MAX_IMAGES} images total.`);
+    }
+
+    const accepted: NewImage[] = [];
+    for (const file of incoming.slice(0, room)) {
+      if (!file.type.startsWith("image/")) {
+        setError(`${file.name} isn't an image.`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setError(`${file.name} is over 10MB.`);
+        continue;
+      }
+      accepted.push({ file, previewUrl: URL.createObjectURL(file) });
+    }
+
+    setNewImages((prev) => [...prev, ...accepted]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  function showNext() {
-    if (!product) return;
-    setActiveIndex((i) => (i === product.images.length - 1 ? 0 : i + 1));
+  function removeExisting(index: number) {
+    setExistingImages((prev) => prev.filter((_, i) => i !== index));
   }
 
-  if (loading) {
+  function removeNew(index: number) {
+    setNewImages((prev) => {
+      const next = [...prev];
+      URL.revokeObjectURL(next[index].previewUrl);
+      next.splice(index, 1);
+      return next;
+    });
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    setSaved(false);
+
+    if (!name.trim()) {
+      setError("Give your product a name.");
+      return;
+    }
+    const priceNumber = Number(price);
+    if (!price || Number.isNaN(priceNumber) || priceNumber <= 0) {
+      setError("Enter a valid price.");
+      return;
+    }
+    if (totalImageCount === 0) {
+      setError("Keep at least one photo.");
+      return;
+    }
+    if (isFashion && !size.trim()) {
+      setError("Enter a size.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      const uploadedUrls: string[] = [];
+      for (let i = 0; i < newImages.length; i++) {
+        const { file } = newImages[i];
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${user.id}/${Date.now()}-${i}.${ext}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("product-images")
+          .upload(path, file, { contentType: file.type });
+
+        if (uploadError) {
+          throw new Error(`Couldn't upload ${file.name}: ${uploadError.message}`);
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("product-images")
+          .getPublicUrl(path);
+
+        uploadedUrls.push(publicUrlData.publicUrl);
+      }
+
+      const { error: updateError } = await supabase
+        .from("products")
+        .update({
+          name: name.trim(),
+          description: description.trim() || null,
+          price: priceNumber,
+          category,
+          size: isFashion ? size.trim() : null,
+          images: [...existingImages, ...uploadedUrls],
+        })
+        .eq("id", id);
+
+      if (updateError) {
+        throw new Error(updateError.message);
+      }
+
+      setNewImages([]);
+      setExistingImages([...existingImages, ...uploadedUrls]);
+      setSaving(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+      setSaving(false);
+    }
+  }
+
+  if (checking) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
         <p className="font-body text-sm text-navy-soft">Loading...</p>
@@ -59,18 +222,18 @@ export default function ProductPage() {
     );
   }
 
-  if (!product) {
+  if (notFound) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-ice px-6 text-center">
         <p className="font-body text-sm text-navy-soft">
-          This product doesn't exist or has been removed.
+          Product not found, or it doesn't belong to your shop.
         </p>
-        <button
-          onClick={() => router.push("/dashboard")}
+        <Link
+          href="/dashboard/shop/products"
           className="focus-ring bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
         >
-          Back to marketplace
-        </button>
+          Back to my products
+        </Link>
       </main>
     );
   }
@@ -79,144 +242,175 @@ export default function ProductPage() {
     <main className="min-h-screen bg-paper">
       <header className="border-b border-line">
         <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
-          <Link href="/dashboard" className="font-display text-2xl tracking-tightest text-navy">
+          <span className="font-display text-2xl tracking-tightest text-navy">
             Atlas
-          </Link>
+          </span>
           <Link
-            href="/dashboard"
+            href="/dashboard/shop/products"
             className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
           >
-            ← Back to marketplace
+            ← Back to my products
           </Link>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-content grid-cols-1 gap-10 px-6 py-12 md:grid-cols-2 md:px-10">
-        {/* Gallery */}
-        <div>
-          <button
-            type="button"
-            onClick={() => setLightboxOpen(true)}
-            className="focus-ring block w-full overflow-hidden border border-line bg-ice"
-            aria-label="View full size image"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={product.images[activeIndex]}
-              alt={product.name}
-              className="aspect-square w-full object-cover"
-            />
-          </button>
+      <div className="mx-auto max-w-xl px-6 py-16 md:px-10">
+        <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
+          Edit product
+        </h1>
 
-          {product.images.length > 1 && (
-            <div className="mt-3 grid grid-cols-5 gap-2">
-              {product.images.map((src, i) => (
-                <button
-                  key={src}
-                  type="button"
-                  onClick={() => setActiveIndex(i)}
-                  className={`focus-ring aspect-square overflow-hidden border ${
-                    i === activeIndex ? "border-blue" : "border-line"
-                  }`}
-                >
+        <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+          <div>
+            <label className="font-body text-sm font-medium text-navy">
+              Photos ({totalImageCount}/{MAX_IMAGES})
+            </label>
+
+            <div className="mt-2 grid grid-cols-3 gap-3 sm:grid-cols-5">
+              {existingImages.map((src, i) => (
+                <div key={src} className="group relative aspect-square border border-line">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={src} alt={`${product.name} ${i + 1}`} className="h-full w-full object-cover" />
-                </button>
+                  <img src={src} alt={`Photo ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeExisting(i)}
+                    aria-label="Remove photo"
+                    className="focus-ring absolute right-1 top-1 flex h-6 w-6 items-center justify-center bg-navy/80 text-white"
+                  >
+                    ×
+                  </button>
+                </div>
               ))}
+              {newImages.map((img, i) => (
+                <div key={img.previewUrl} className="group relative aspect-square border border-line">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={img.previewUrl}
+                    alt={`New photo ${i + 1}`}
+                    className="h-full w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeNew(i)}
+                    aria-label="Remove photo"
+                    className="focus-ring absolute right-1 top-1 flex h-6 w-6 items-center justify-center bg-navy/80 text-white"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              {totalImageCount < MAX_IMAGES && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="focus-ring flex aspect-square flex-col items-center justify-center gap-1 border border-dashed border-line bg-ice text-navy-soft transition-colors hover:border-blue hover:text-blue"
+                >
+                  <span className="text-2xl leading-none">+</span>
+                  <span className="font-body text-xs">Add photo</span>
+                </button>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => handleFilesSelected(e.target.files)}
+              className="hidden"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="name" className="font-body text-sm font-medium text-navy">
+              Product name
+            </label>
+            <input
+              id="name"
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="description" className="font-body text-sm font-medium text-navy">
+              Description
+            </label>
+            <textarea
+              id="description"
+              rows={4}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="focus-ring mt-2 w-full resize-none border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="price" className="font-body text-sm font-medium text-navy">
+                Price (₦)
+              </label>
+              <input
+                id="price"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
+              />
+            </div>
+            <div>
+              <label htmlFor="category" className="font-body text-sm font-medium text-navy">
+                Category
+              </label>
+              <select
+                id="category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
+              >
+                {productCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {isFashion && (
+            <div>
+              <label htmlFor="size" className="font-body text-sm font-medium text-navy">
+                Size
+              </label>
+              <input
+                id="size"
+                type="text"
+                required
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                placeholder="e.g. M, 42, or One size"
+                className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+              />
             </div>
           )}
-        </div>
 
-        {/* Details */}
-        <div>
-          <p className="font-body text-xs text-navy-soft">{product.category}</p>
-          <h1 className="mt-1 font-display text-3xl tracking-tightest text-navy">
-            {product.name}
-          </h1>
-          {product.shops?.shop_name && (
-            <p className="mt-2 font-body text-sm text-navy-soft">
-              Sold by {product.shops.shop_name}
-            </p>
-          )}
-          <p className="mt-6 font-display text-2xl text-navy">
-            ₦{product.price.toLocaleString()}
-          </p>
+          {error && <p className="font-body text-sm text-red-700">{error}</p>}
 
-          {product.size && (
-            <p className="mt-3 font-body text-sm text-navy">
-              <span className="text-navy-soft">Size:</span> {product.size}
-            </p>
-          )}
-
-          {product.digital_file_path && (
-            <p className="mt-3 font-body text-sm text-blue">
-              📥 Includes a downloadable file, unlocked after purchase.
-            </p>
-          )}
-
-          {product.description && (
-            <p className="mt-6 max-w-md font-body text-sm leading-relaxed text-navy-soft">
-              {product.description}
-            </p>
-          )}
-
-          <Link
-            href="/cart"
-            className="focus-ring mt-8 inline-block bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-          >
-            Buy now
-          </Link>
-        </div>
-      </div>
-
-      {/* Lightbox */}
-      {lightboxOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/95 px-4">
           <button
-            type="button"
-            onClick={() => setLightboxOpen(false)}
-            aria-label="Close"
-            className="focus-ring absolute right-5 top-5 flex h-10 w-10 items-center justify-center text-2xl text-white"
+            type="submit"
+            disabled={saving}
+            className="focus-ring w-full bg-blue px-5 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
           >
-            ×
+            {saving ? "Saving..." : saved ? "✓ Saved" : "Save changes"}
           </button>
-
-          {product.images.length > 1 && (
-            <button
-              type="button"
-              onClick={showPrev}
-              aria-label="Previous image"
-              className="focus-ring absolute left-3 flex h-10 w-10 items-center justify-center text-2xl text-white sm:left-6"
-            >
-              ‹
-            </button>
-          )}
-
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={product.images[activeIndex]}
-            alt={product.name}
-            className="max-h-[85vh] max-w-full object-contain"
-          />
-
-          {product.images.length > 1 && (
-            <button
-              type="button"
-              onClick={showNext}
-              aria-label="Next image"
-              className="focus-ring absolute right-3 flex h-10 w-10 items-center justify-center text-2xl text-white sm:right-6"
-            >
-              ›
-            </button>
-          )}
-
-          {product.images.length > 1 && (
-            <p className="absolute bottom-6 font-body text-sm text-white/70">
-              {activeIndex + 1} / {product.images.length}
-            </p>
-          )}
-        </div>
-      )}
+        </form>
+      </div>
     </main>
   );
 }
