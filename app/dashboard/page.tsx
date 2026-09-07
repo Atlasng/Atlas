@@ -53,10 +53,16 @@ function DashboardContent() {
     supabase
       .from("products")
       .select("id, name, category, price, images")
-      .order("created_at", { ascending: false })
       .then(({ data }) => {
         if (!active) return;
-        setProducts((data as Product[]) ?? []);
+        const list = (data as Product[]) ?? [];
+        // Fisher-Yates shuffle — random order each time the page loads,
+        // instead of always showing the same newest-first order.
+        for (let i = list.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [list[i], list[j]] = [list[j], list[i]];
+        }
+        setProducts(list);
         setProductsLoading(false);
       });
 

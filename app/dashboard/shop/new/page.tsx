@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
+const MAX_DIGITAL_FILE_BYTES = 200 * 1024 * 1024; // 200MB
 
 const productCategories = [
   "Electronics",
@@ -38,9 +39,14 @@ export default function NewProductPage() {
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState(productCategories[0]);
   const [images, setImages] = useState<PickedImage[]>([]);
+  const [digitalFile, setDigitalFile] = useState<File | null>(null);
+  const [size, setSize] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
+
+  const isDigitalProduct = category === "Digital Products";
+  const isFashion = category === "Fashion";
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -122,6 +128,14 @@ export default function NewProductPage() {
       setError("Add at least one photo.");
       return;
     }
+    if (isDigitalProduct && !digitalFile) {
+      setError("Add the file buyers will download after paying.");
+      return;
+    }
+    if (isFashion && !size.trim()) {
+      setError("Enter a size.");
+      return;
+    }
 
     setSubmitting(true);
 
@@ -157,6 +171,23 @@ export default function NewProductPage() {
         imageUrls.push(publicUrlData.publicUrl);
       }
 
+      let digitalFilePath: string | null = null;
+      if (isDigitalProduct && digitalFile) {
+        setUploadStatus("Uploading file...");
+        const ext = digitalFile.name.split(".").pop() || "bin";
+        const path = `${user.id}/${Date.now()}.${ext}`;
+
+        const { error: fileError } = await supabase.storage
+          .from("digital-files")
+          .upload(path, digitalFile, { contentType: digitalFile.type });
+
+        if (fileError) {
+          throw new Error(`Couldn't upload ${digitalFile.name}: ${fileError.message}`);
+        }
+
+        digitalFilePath = path;
+      }
+
       setUploadStatus("Saving product...");
 
       const { error: insertError } = await supabase.from("products").insert({
@@ -166,6 +197,8 @@ export default function NewProductPage() {
         price: priceNumber,
         category,
         images: imageUrls,
+        digital_file_path: digitalFilePath,
+        size: isFashion ? size.trim() : null,
       });
 
       if (insertError) {
@@ -321,6 +354,56 @@ export default function NewProductPage() {
               </select>
             </div>
           </div>
+
+          {isDigitalProduct && (
+            <div className="border border-blue bg-ice px-4 py-4">
+              <label htmlFor="digitalFile" className="font-body text-sm font-medium text-navy">
+                File buyers download after paying
+              </label>
+              <p className="mt-1 font-body text-xs text-navy-soft">
+                Video, PDF, ZIP, or similar — up to 200MB.
+              </p>
+              <input
+                id="digitalFile"
+                type="file"
+                required
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (file && file.size > MAX_DIGITAL_FILE_BYTES) {
+                    setError(`${file.name} is over 200MB.`);
+                    e.target.value = "";
+                    setDigitalFile(null);
+                    return;
+                  }
+                  setError("");
+                  setDigitalFile(file);
+                }}
+                className="focus-ring mt-3 w-full font-body text-sm text-navy"
+              />
+              {digitalFile && (
+                <p className="mt-2 font-body text-xs text-navy">
+                  Selected: {digitalFile.name} ({Math.round(digitalFile.size / 1024 / 1024)}MB)
+                </p>
+              )}
+            </div>
+          )}
+
+          {isFashion && (
+            <div>
+              <label htmlFor="size" className="font-body text-sm font-medium text-navy">
+                Size
+              </label>
+              <input
+                id="size"
+                type="text"
+                required
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                placeholder="e.g. M, 42, or One size"
+                className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+              />
+            </div>
+          )}
 
           {error && <p className="font-body text-sm text-red-700">{error}</p>}
 

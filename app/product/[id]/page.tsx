@@ -12,6 +12,8 @@ type Product = {
   price: number;
   category: string;
   images: string[];
+  size: string | null;
+  digital_file_path: string | null;
   shops: { shop_name: string } | null;
 };
 
@@ -29,7 +31,7 @@ export default function ProductPage() {
   useEffect(() => {
     supabase
       .from("products")
-      .select("id, name, description, price, category, images, shops(shop_name)")
+      .select("id, name, description, price, category, images, size, digital_file_path, shops(shop_name)")
       .eq("id", id)
       .maybeSingle()
       .then(({ data }) => {
@@ -139,6 +141,18 @@ export default function ProductPage() {
           <p className="mt-6 font-display text-2xl text-navy">
             ₦{product.price.toLocaleString()}
           </p>
+
+          {product.size && (
+            <p className="mt-3 font-body text-sm text-navy">
+              <span className="text-navy-soft">Size:</span> {product.size}
+            </p>
+          )}
+
+          {product.digital_file_path && (
+            <p className="mt-3 font-body text-sm text-blue">
+              📥 Includes a downloadable file, unlocked after purchase.
+            </p>
+          )}
 
           {product.description && (
             <p className="mt-6 max-w-md font-body text-sm leading-relaxed text-navy-soft">
