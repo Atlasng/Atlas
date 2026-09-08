@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { useCart } from "@/lib/cart-context";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 
 type Product = {
   id: string;
@@ -12,34 +12,80 @@ type Product = {
   name: string;
   description: string | null;
   price: number;
+  price_type: "fixed" | "negotiable";
   category: string;
   images: string[];
-  sizes: string[];
+  sizes: string[] | null;
+  colors: string[] | null;
   digital_file_path: string | null;
   shop_name: string | null;
+  shop_phone: string | null;
 };
 
 export default function ProductPage() {
   const params = useParams();
   const router = useRouter();
   const supabase = createClient();
-  const { refresh: refreshCart } = useCart();
   const id = params.id as string;
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [addingToCart, setAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [cartError, setCartError] = useState("");
+  const [dropshipMessage, setDropshipMessage] = useState("");
+
+  const hasSizes = Boolean(product?.sizes && product.sizes.length > 0);
+  const hasColors = Boolean(product?.colors && product.colors.length > 0);
+  const isNegotiable = product?.price_type === "negotiable";
+
+  function handleDropshipClick() {
+    // TODO: hook up real dropship behavior once it's decided (WhatsApp
+    // handoff, an info page, an application form, etc). For now this just
+    // confirms the button is live.
+    setDropshipMessage("Dropship — coming soon.");
+    setTimeout(() => setDropshipMessage(""), 2500);
+  }
+
+  function handleNegotiate() {
+    if (!product) return;
+    setCartError("");
+
+    if (hasSizes && !selectedSize) {
+      setCartError("Select a size first.");
+      return;
+    }
+    if (hasColors && !selectedColor) {
+      setCartError("Select a color first.");
+      return;
+    }
+    if (!product.shop_phone) {
+      setCartError("This seller hasn't added a WhatsApp number yet.");
+      return;
+    }
+
+    const variantBits = [selectedSize, selectedColor].filter(Boolean).join(", ");
+    const message = `Hi! I'm interested in "${product.name}"${
+      variantBits ? ` (${variantBits})` : ""
+    } listed for ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
+
+    window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
+  }
 
   async function handleAddToCart() {
     setCartError("");
 
-    if (product && product.sizes.length > 0 && !selectedSize) {
+    if (hasSizes && !selectedSize) {
       setCartError("Select a size first.");
+      return;
+    }
+    if (hasColors && !selectedColor) {
+      setCartError("Select a color first.");
       return;
     }
 
@@ -54,15 +100,22 @@ export default function ProductPage() {
       return;
     }
 
-    const sizeValue = selectedSize ?? "";
-
-    const { data: existing } = await supabase
+    // A given product + size + color combo is one cart line. Different
+    // variants of the same product are separate lines.
+    let existingQuery = supabase
       .from("cart_items")
       .select("id, quantity")
       .eq("user_id", session.user.id)
-      .eq("product_id", id)
-      .eq("size", sizeValue)
-      .maybeSingle();
+      .eq("product_id", id);
+
+    existingQuery = selectedSize
+      ? existingQuery.eq("size", selectedSize)
+      : existingQuery.is("size", null);
+    existingQuery = selectedColor
+      ? existingQuery.eq("color", selectedColor)
+      : existingQuery.is("color", null);
+
+    const { data: existing } = await existingQuery.maybeSingle();
 
     if (existing) {
       await supabase
@@ -74,7 +127,8 @@ export default function ProductPage() {
         user_id: session.user.id,
         product_id: id,
         quantity: 1,
-        size: sizeValue,
+        size: selectedSize,
+        color: selectedColor,
       });
       if (error) {
         setCartError(error.message);
@@ -83,7 +137,6 @@ export default function ProductPage() {
       }
     }
 
-    await refreshCart();
     setAddingToCart(false);
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
@@ -94,12 +147,36 @@ export default function ProductPage() {
       const { data } = await supabase
         .from("products")
         .select(
-          "id, shop_id, name, description, price, category, images, sizes, digital_file_path, shop_name"
+          "id, shop_id, name, description, price, price_type, category, images, sizes, colors, digital_file_path, shop_name, shop_phone"
         )
         .eq("id", id)
         .maybeSingle();
 
-      setProduct(data as Product | null);
+      const fetchedProduct = data as Product | null;
+
+      if (fetchedProduct) {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (session) {
+          const { data: shop } = await supabase
+            .from("shops")
+            .select("id")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+
+          // Just note ownership so we can show a small "manage" link — we
+          // never force a redirect just because someone is browsing their
+          // own listing on the marketplace. Editing only happens from the
+          // "My products" list.
+          if (shop && shop.id === fetchedProduct.shop_id) {
+            setIsOwner(true);
+          }
+        }
+      }
+
+      setProduct(fetchedProduct);
       setLoading(false);
     }
     load();
@@ -147,12 +224,22 @@ export default function ProductPage() {
           <Link href="/dashboard" className="font-display text-2xl tracking-tightest text-navy">
             Atlas
           </Link>
-          <Link
-            href="/dashboard"
-            className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-          >
-            ← Back to marketplace
-          </Link>
+          <div className="flex items-center gap-5">
+            {isOwner && (
+              <Link
+                href={`/dashboard/shop/products/${id}/edit`}
+                className="focus-ring font-body text-sm font-medium text-blue hover:text-blue-dark"
+              >
+                Edit this listing
+              </Link>
+            )}
+            <Link
+              href="/dashboard"
+              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+            >
+              ← Back to marketplace
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -204,27 +291,68 @@ export default function ProductPage() {
             </p>
           )}
           <p className="mt-6 font-display text-2xl text-navy">
+            {isNegotiable && (
+              <span className="mr-2 font-body text-xs font-medium uppercase tracking-wide text-navy-soft">
+                Asking price
+              </span>
+            )}
             ₦{product.price.toLocaleString()}
           </p>
 
-          {product.sizes.length > 0 && (
-            <div className="mt-4">
+          {hasSizes && (
+            <div className="mt-5">
               <p className="font-body text-sm text-navy-soft">Size</p>
               <div className="mt-2 flex flex-wrap gap-2">
-                {product.sizes.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setSelectedSize(s)}
-                    className={`focus-ring border px-4 py-2 font-body text-sm transition-colors ${
-                      selectedSize === s
-                        ? "border-blue bg-blue text-white"
-                        : "border-line bg-ice text-navy hover:border-blue"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+                {product.sizes!.map((size) => {
+                  const active = selectedSize === size;
+                  return (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => {
+                        setSelectedSize(size);
+                        setCartError("");
+                      }}
+                      aria-pressed={active}
+                      className={`focus-ring min-w-[3rem] border px-4 py-2 font-body text-sm font-medium transition-colors ${
+                        active
+                          ? "border-blue bg-blue text-white"
+                          : "border-line bg-ice text-navy hover:border-blue"
+                      }`}
+                    >
+                      {size}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {hasColors && (
+            <div className="mt-5">
+              <p className="font-body text-sm text-navy-soft">Color</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {product.colors!.map((color) => {
+                  const active = selectedColor === color;
+                  return (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => {
+                        setSelectedColor(color);
+                        setCartError("");
+                      }}
+                      aria-pressed={active}
+                      className={`focus-ring border px-4 py-2 font-body text-sm font-medium transition-colors ${
+                        active
+                          ? "border-blue bg-blue text-white"
+                          : "border-line bg-ice text-navy hover:border-blue"
+                      }`}
+                    >
+                      {color}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -242,13 +370,31 @@ export default function ProductPage() {
           )}
 
           <div className="mt-8 flex flex-wrap items-center gap-4">
-            <button
-              onClick={handleAddToCart}
-              disabled={addingToCart}
-              className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-            >
-              {addingToCart ? "Adding..." : addedToCart ? "✓ Added to cart" : "Add to cart"}
-            </button>
+            {isNegotiable ? (
+              <button
+                onClick={handleNegotiate}
+                className="focus-ring flex items-center gap-2 bg-[#25D366] px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-[#1DA851]"
+              >
+                Negotiate on WhatsApp
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={handleAddToCart}
+                  disabled={addingToCart}
+                  className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+                >
+                  {addingToCart ? "Adding..." : addedToCart ? "✓ Added to cart" : "Add to cart"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDropshipClick}
+                  className="focus-ring border border-blue px-5 py-3.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+                >
+                  Dropship
+                </button>
+              </>
+            )}
             <Link
               href="/cart"
               className="focus-ring font-body text-sm font-medium text-blue hover:text-blue-dark"
@@ -258,6 +404,9 @@ export default function ProductPage() {
           </div>
           {cartError && (
             <p className="mt-3 font-body text-sm text-red-700">{cartError}</p>
+          )}
+          {dropshipMessage && (
+            <p className="mt-3 font-body text-sm text-navy-soft">{dropshipMessage}</p>
           )}
         </div>
       </div>

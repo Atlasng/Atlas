@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useCart } from "@/lib/cart-context";
+import { buildWhatsAppLink } from "@/lib/whatsapp";
 import type { User } from "@supabase/supabase-js";
 
 type Product = {
@@ -12,9 +13,12 @@ type Product = {
   name: string;
   category: string;
   price: number;
+  price_type: "fixed" | "negotiable";
   images: string[];
   sizes: string[];
+  colors: string[];
   shop_name: string | null;
+  shop_phone: string | null;
 };
 
 const categoryFilters = [
@@ -58,7 +62,7 @@ export default function DashboardPage() {
 
     supabase
       .from("products")
-      .select("id, name, category, price, images, sizes, shop_name")
+      .select("id, name, category, price, price_type, images, sizes, colors, shop_name, shop_phone")
       .then(({ data }) => {
         if (!active) return;
         const list = (data as unknown as Product[]) ?? [];
@@ -135,9 +139,38 @@ export default function DashboardPage() {
     router.replace("/login");
   }
 
+  function handleQuickDropship(product: Product) {
+    // TODO: hook up real dropship behavior once it's decided.
+    setToast(`Dropship for "${product.name}" — coming soon.`);
+  }
+
+  function handleQuickNegotiate(product: Product) {
+    if (product.sizes.length > 0 || product.colors.length > 0) {
+      setToast(`Open "${product.name}" to pick a ${
+        product.sizes.length > 0 && product.colors.length > 0
+          ? "size and color"
+          : product.sizes.length > 0
+          ? "size"
+          : "color"
+      } before negotiating.`);
+      return;
+    }
+    if (!product.shop_phone) {
+      setToast(`This seller hasn't added a WhatsApp number yet.`);
+      return;
+    }
+
+    const message = `Hi! I'm interested in "${product.name}" listed for ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
+    window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
+  }
+
   async function handleQuickAddToCart(product: Product) {
     if (product.sizes.length > 0) {
       setToast(`Select a size for "${product.name}" to add it to your cart.`);
+      return;
+    }
+    if (product.colors.length > 0) {
+      setToast(`Select a color for "${product.name}" to add it to your cart.`);
       return;
     }
 
@@ -215,6 +248,8 @@ export default function DashboardPage() {
         cartCount={cartCount}
         onLogout={handleLogout}
         onQuickAddToCart={handleQuickAddToCart}
+        onQuickNegotiate={handleQuickNegotiate}
+        onQuickDropship={handleQuickDropship}
       />
       {toast && <Toast message={toast} />}
     </Suspense>
@@ -235,6 +270,8 @@ function DashboardBody({
   cartCount,
   onLogout,
   onQuickAddToCart,
+  onQuickNegotiate,
+  onQuickDropship,
 }: {
   user: User | null;
   name: string;
@@ -249,6 +286,8 @@ function DashboardBody({
   cartCount: number;
   onLogout: () => void;
   onQuickAddToCart: (product: Product) => void;
+  onQuickNegotiate: (product: Product) => void;
+  onQuickDropship: (product: Product) => void;
 }) {
   const searchParams = useSearchParams();
   const restoredRef = useRef(false);
@@ -569,18 +608,37 @@ function DashboardBody({
                     <p className="mt-2 font-body text-sm font-medium text-navy">
                       ₦{product.price.toLocaleString()}
                     </p>
-                    <button
-                      type="button"
-                      onClick={() => onQuickAddToCart(product)}
-                      disabled={addingProductId === product.id}
-                      className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-                    >
-                      {addingProductId === product.id
-                        ? "Adding..."
-                        : addedProductId === product.id
-                        ? "✓ Added"
-                        : "Add to cart"}
-                    </button>
+                    {product.price_type === "negotiable" ? (
+                      <button
+                        type="button"
+                        onClick={() => onQuickNegotiate(product)}
+                        className="focus-ring mt-3 w-full bg-[#25D366] px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-[#1DA851]"
+                      >
+                        Negotiate on WhatsApp
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => onQuickAddToCart(product)}
+                          disabled={addingProductId === product.id}
+                          className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+                        >
+                          {addingProductId === product.id
+                            ? "Adding..."
+                            : addedProductId === product.id
+                            ? "✓ Added"
+                            : "Add to cart"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onQuickDropship(product)}
+                          className="focus-ring mt-2 w-full border border-blue px-4 py-2 font-body text-xs font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+                        >
+                          Dropship
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

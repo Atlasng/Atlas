@@ -9,7 +9,9 @@ const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_DIGITAL_FILE_BYTES = 200 * 1024 * 1024; // 200MB
 
-const standardSizes = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "One size"];
+// Standard size run a seller picks from — they just tap the ones they
+// actually stock instead of typing anything.
+const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
 
 const productCategories = [
   "Electronics",
@@ -36,14 +38,18 @@ export default function NewProductPage() {
   const [checking, setChecking] = useState(true);
   const [shopId, setShopId] = useState<string | null>(null);
   const [shopName, setShopName] = useState<string | null>(null);
+  const [shopPhone, setShopPhone] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [priceType, setPriceType] = useState<"fixed" | "negotiable">("fixed");
   const [category, setCategory] = useState(productCategories[0]);
   const [images, setImages] = useState<PickedImage[]>([]);
   const [digitalFile, setDigitalFile] = useState<File | null>(null);
-  const [size, setSize] = useState<string[]>([]);
+  const [selectedSizes, setSelectedSizes] = useState<string[]>([]);
+  const [colors, setColors] = useState<string[]>([]);
+  const [colorInput, setColorInput] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -60,7 +66,7 @@ export default function NewProductPage() {
 
       const { data: shop } = await supabase
         .from("shops")
-        .select("id, shop_name")
+        .select("id, shop_name, phone")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
@@ -71,10 +77,36 @@ export default function NewProductPage() {
 
       setShopId(shop.id);
       setShopName(shop.shop_name);
+      setShopPhone(shop.phone);
       setChecking(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Digital products are always fixed price — there's nothing to haggle
+  // over on a file that unlocks instantly after payment.
+  useEffect(() => {
+    if (isDigitalProduct) setPriceType("fixed");
+  }, [isDigitalProduct]);
+
+  function toggleSize(size: string) {
+    setSelectedSizes((prev) =>
+      prev.includes(size) ? prev.filter((s) => s !== size) : [...prev, size]
+    );
+  }
+
+  function addColor() {
+    const value = colorInput.trim();
+    if (!value) return;
+    if (!colors.some((c) => c.toLowerCase() === value.toLowerCase())) {
+      setColors((prev) => [...prev, value]);
+    }
+    setColorInput("");
+  }
+
+  function removeColor(color: string) {
+    setColors((prev) => prev.filter((c) => c !== color));
+  }
 
   function handleFilesSelected(fileList: FileList | null) {
     if (!fileList) return;
@@ -136,8 +168,14 @@ export default function NewProductPage() {
       setError("Add the file buyers will download after paying.");
       return;
     }
-    if (isFashion && size.length === 0) {
-      setError("Select at least one size.");
+    if (isFashion && selectedSizes.length === 0) {
+      setError("Select at least one size you have in stock.");
+      return;
+    }
+    if (priceType === "negotiable" && !shopPhone) {
+      setError(
+        "Add a phone number to your shop before listing negotiable items — that's how buyers reach you on WhatsApp."
+      );
       return;
     }
 
@@ -197,13 +235,20 @@ export default function NewProductPage() {
       const { error: insertError } = await supabase.from("products").insert({
         shop_id: shopId,
         shop_name: shopName,
+        shop_phone: shopPhone,
         name: name.trim(),
         description: description.trim() || null,
         price: priceNumber,
+        price_type: priceType,
         category,
         images: imageUrls,
         digital_file_path: digitalFilePath,
-        sizes: isFashion ? size : [],
+        // Array of every size the seller has in stock for this listing —
+        // buyers pick one of these on the product page before adding to cart.
+        sizes: isFashion ? selectedSizes : null,
+        // Optional — only enforced on the buyer side if the seller bothers
+        // to fill it in.
+        colors: colors.length > 0 ? colors : null,
       });
 
       if (insertError) {
@@ -360,6 +405,52 @@ export default function NewProductPage() {
             </div>
           </div>
 
+          {!isDigitalProduct && (
+            <div>
+              <label className="font-body text-sm font-medium text-navy">
+                Pricing
+              </label>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPriceType("fixed")}
+                  aria-pressed={priceType === "fixed"}
+                  className={`focus-ring border px-4 py-3 text-left font-body text-sm transition-colors ${
+                    priceType === "fixed"
+                      ? "border-blue bg-blue text-white"
+                      : "border-line bg-ice text-navy hover:border-blue"
+                  }`}
+                >
+                  <span className="block font-medium">Fixed price</span>
+                  <span className={`block text-xs ${priceType === "fixed" ? "text-white/80" : "text-navy-soft"}`}>
+                    Buyers pay and check out as normal
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPriceType("negotiable")}
+                  aria-pressed={priceType === "negotiable"}
+                  className={`focus-ring border px-4 py-3 text-left font-body text-sm transition-colors ${
+                    priceType === "negotiable"
+                      ? "border-blue bg-blue text-white"
+                      : "border-line bg-ice text-navy hover:border-blue"
+                  }`}
+                >
+                  <span className="block font-medium">Negotiable</span>
+                  <span className={`block text-xs ${priceType === "negotiable" ? "text-white/80" : "text-navy-soft"}`}>
+                    Buyers message you on WhatsApp instead
+                  </span>
+                </button>
+              </div>
+              {priceType === "negotiable" && !shopPhone && (
+                <p className="mt-2 font-body text-xs text-red-700">
+                  Your shop has no phone number on file, so buyers won't be
+                  able to reach you. Add one in your shop settings first.
+                </p>
+              )}
+            </div>
+          )}
+
           {isDigitalProduct && (
             <div className="border border-blue bg-ice px-4 py-4">
               <label htmlFor="digitalFile" className="font-body text-sm font-medium text-navy">
@@ -399,33 +490,84 @@ export default function NewProductPage() {
                 Sizes in stock
               </label>
               <p className="mt-1 font-body text-xs text-navy-soft">
-                Select every size you currently have.
+                Tap every size you currently have. Buyers will only be able
+                to choose from what you select here.
               </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {standardSizes.map((s) => {
-                  const isSelected = size.includes(s);
+              <div className="mt-3 flex flex-wrap gap-2">
+                {SIZE_OPTIONS.map((size) => {
+                  const active = selectedSizes.includes(size);
                   return (
                     <button
-                      key={s}
+                      key={size}
                       type="button"
-                      onClick={() =>
-                        setSize((prev) =>
-                          isSelected ? prev.filter((v) => v !== s) : [...prev, s]
-                        )
-                      }
-                      className={`focus-ring border px-4 py-2 font-body text-sm transition-colors ${
-                        isSelected
+                      onClick={() => toggleSize(size)}
+                      aria-pressed={active}
+                      className={`focus-ring min-w-[3rem] border px-4 py-2 font-body text-sm font-medium transition-colors ${
+                        active
                           ? "border-blue bg-blue text-white"
-                          : "border-line bg-ice text-navy-soft hover:border-blue hover:text-blue"
+                          : "border-line bg-ice text-navy hover:border-blue"
                       }`}
                     >
-                      {s}
+                      {size}
                     </button>
                   );
                 })}
               </div>
             </div>
           )}
+
+          <div>
+            <label htmlFor="colorInput" className="font-body text-sm font-medium text-navy">
+              Colors (optional)
+            </label>
+            <p className="mt-1 font-body text-xs text-navy-soft">
+              Only add colors if you actually stock more than one. If you
+              add any, buyers must pick one before they can buy.
+            </p>
+            <div className="mt-2 flex gap-2">
+              <input
+                id="colorInput"
+                type="text"
+                value={colorInput}
+                onChange={(e) => setColorInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addColor();
+                  }
+                }}
+                placeholder="e.g. Black"
+                className="focus-ring flex-1 border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+              />
+              <button
+                type="button"
+                onClick={addColor}
+                className="focus-ring shrink-0 border border-blue px-4 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+              >
+                Add
+              </button>
+            </div>
+            {colors.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {colors.map((color) => (
+                  <span
+                    key={color}
+                    className="flex items-center gap-2 border border-line bg-ice px-3 py-1.5 font-body text-sm text-navy"
+                  >
+                    {color}
+                    <button
+                      type="button"
+                      onClick={() => removeColor(color)}
+                      aria-label={`Remove ${color}`}
+                      className="focus-ring text-navy-soft hover:text-red-700"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
 
           {error && <p className="font-body text-sm text-red-700">{error}</p>}
 
