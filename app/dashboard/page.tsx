@@ -78,12 +78,19 @@ function DashboardContent() {
 
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const [addedProductId, setAddedProductId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   async function handleQuickAddToCart(product: Product) {
     if (product.sizes.length > 0) {
-      // Sizes require a choice — send them to the product page instead of
-      // guessing which one to add.
-      router.push(`/product/${product.id}`);
+      // Sizes require a choice — we can't guess which one to add from the
+      // card, so let the person know instead of adding the wrong thing.
+      setToast(`Select a size for "${product.name}" to add it to your cart.`);
       return;
     }
 
@@ -188,7 +195,7 @@ function DashboardContent() {
         term === "" || p.name.toLowerCase().includes(term);
       return matchesCategory && matchesSearch;
     });
-  }, [activeCategory, searchTerm]);
+  }, [products, activeCategory, searchTerm]);
 
   if (loading) {
     return (
@@ -501,6 +508,8 @@ function DashboardContent() {
           </Link>
         </div>
       </div>
+
+      {toast && <Toast message={toast} />}
     </main>
   );
 }
@@ -510,5 +519,15 @@ export default function DashboardPage() {
     <Suspense fallback={null}>
       <DashboardContent />
     </Suspense>
+  );
+}
+
+function Toast({ message }: { message: string }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+      <div className="pointer-events-auto max-w-sm border border-line bg-navy px-5 py-3 text-center font-body text-sm text-white shadow-lg transition-opacity">
+        {message}
+      </div>
+    </div>
   );
 }
