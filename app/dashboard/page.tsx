@@ -403,18 +403,41 @@ function DashboardBody({
             {user && (
               <Link
                 href="/account"
-                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+                aria-label="My account"
+                className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
               >
-                My account
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M3.5 15c0-3 2.5-5 5.5-5s5.5 2 5.5 5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
               </Link>
             )}
 
             {user && (
               <Link
                 href="/orders"
-                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+                aria-label="My orders"
+                className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
               >
-                My orders
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <path
+                    d="M4 2h10v14l-2-1.2-1.5 1.2L9 14.8 7.5 16 6 14.8 4 16V2Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M6.5 6h5M6.5 9h5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
               </Link>
             )}
 
