@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -30,17 +30,18 @@ const categoryFilters = [
   "Digital Products",
 ];
 
-function DashboardContent() {
+const SCROLL_STATE_KEY = "atlas-marketplace-state";
+
+// All data-fetching lives here, in a component that does NOT call
+// useSearchParams(). That hook forces this component's Suspense boundary
+// to re-suspend/resume around search-param changes on Next 14, which can
+// discard state in a component that both fetches data AND reads search
+// params. Splitting them means the fetch only ever runs once, reliably,
+// regardless of what the URL's query string is doing.
+export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
   const { count: cartCount, refresh: refreshCart } = useCart();
-  const searchParams = useSearchParams();
-
-  const categoryParam = searchParams.get("category");
-  const initialCategory = categoryFilters.includes(categoryParam ?? "")
-    ? (categoryParam as string)
-    : "All";
-  const initialSearch = searchParams.get("search") ?? "";
 
   const [user, setUser] = useState<User | null>(null);
   const [hasShop, setHasShop] = useState(false);
@@ -48,8 +49,9 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState(initialCategory);
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
+  const [addedProductId, setAddedProductId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -60,8 +62,6 @@ function DashboardContent() {
       .then(({ data }) => {
         if (!active) return;
         const list = (data as unknown as Product[]) ?? [];
-        // Fisher-Yates shuffle — random order each time the page loads,
-        // instead of always showing the same newest-first order.
         for (let i = list.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [list[i], list[j]] = [list[j], list[i]];
@@ -76,62 +76,11 @@ function DashboardContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const [addingProductId, setAddingProductId] = useState<string | null>(null);
-  const [addedProductId, setAddedProductId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(timer);
   }, [toast]);
-
-  async function handleQuickAddToCart(product: Product) {
-    if (product.sizes.length > 0) {
-      // Sizes require a choice — we can't guess which one to add from the
-      // card, so let the person know instead of adding the wrong thing.
-      setToast(`Select a size for "${product.name}" to add it to your cart.`);
-      return;
-    }
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-
-    setAddingProductId(product.id);
-
-    const { data: existing } = await supabase
-      .from("cart_items")
-      .select("id, quantity")
-      .eq("user_id", session.user.id)
-      .eq("product_id", product.id)
-      .eq("size", "")
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from("cart_items")
-        .update({ quantity: existing.quantity + 1 })
-        .eq("id", existing.id);
-    } else {
-      await supabase.from("cart_items").insert({
-        user_id: session.user.id,
-        product_id: product.id,
-        quantity: 1,
-        size: "",
-      });
-    }
-
-    await refreshCart();
-    setAddingProductId(null);
-    setAddedProductId(product.id);
-    setTimeout(() => setAddedProductId(null), 1500);
-  }
 
   useEffect(() => {
     let active = true;
@@ -186,16 +135,50 @@ function DashboardContent() {
     router.replace("/login");
   }
 
-  const visibleProducts = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
-    return products.filter((p) => {
-      const matchesCategory =
-        activeCategory === "All" || p.category === activeCategory;
-      const matchesSearch =
-        term === "" || p.name.toLowerCase().includes(term);
-      return matchesCategory && matchesSearch;
-    });
-  }, [products, activeCategory, searchTerm]);
+  async function handleQuickAddToCart(product: Product) {
+    if (product.sizes.length > 0) {
+      setToast(`Select a size for "${product.name}" to add it to your cart.`);
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    setAddingProductId(product.id);
+
+    const { data: existing } = await supabase
+      .from("cart_items")
+      .select("id, quantity")
+      .eq("user_id", session.user.id)
+      .eq("product_id", product.id)
+      .eq("size", "")
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("cart_items")
+        .update({ quantity: existing.quantity + 1 })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("cart_items").insert({
+        user_id: session.user.id,
+        product_id: product.id,
+        quantity: 1,
+        size: "",
+      });
+    }
+
+    await refreshCart();
+    setAddingProductId(null);
+    setAddedProductId(product.id);
+    setTimeout(() => setAddedProductId(null), 1500);
+  }
 
   if (loading) {
     return (
@@ -215,6 +198,114 @@ function DashboardContent() {
     (user?.user_metadata?.full_name as string | undefined) ||
     user?.email ||
     "";
+
+  return (
+    <Suspense fallback={null}>
+      <DashboardBody
+        user={user}
+        name={name}
+        hasShop={hasShop}
+        isExpired={isExpired}
+        expiringSoon={expiringSoon}
+        daysLeft={daysLeft}
+        products={products}
+        productsLoading={productsLoading}
+        addingProductId={addingProductId}
+        addedProductId={addedProductId}
+        cartCount={cartCount}
+        onLogout={handleLogout}
+        onQuickAddToCart={handleQuickAddToCart}
+      />
+      {toast && <Toast message={toast} />}
+    </Suspense>
+  );
+}
+
+function DashboardBody({
+  user,
+  name,
+  hasShop,
+  isExpired,
+  expiringSoon,
+  daysLeft,
+  products,
+  productsLoading,
+  addingProductId,
+  addedProductId,
+  cartCount,
+  onLogout,
+  onQuickAddToCart,
+}: {
+  user: User | null;
+  name: string;
+  hasShop: boolean;
+  isExpired: boolean;
+  expiringSoon: boolean;
+  daysLeft: number | null;
+  products: Product[];
+  productsLoading: boolean;
+  addingProductId: string | null;
+  addedProductId: string | null;
+  cartCount: number;
+  onLogout: () => void;
+  onQuickAddToCart: (product: Product) => void;
+}) {
+  const searchParams = useSearchParams();
+  const restoredRef = useRef(false);
+
+  const categoryParam = searchParams.get("category");
+  const initialCategory = categoryFilters.includes(categoryParam ?? "")
+    ? (categoryParam as string)
+    : "All";
+  const initialSearch = searchParams.get("search") ?? "";
+
+  const [activeCategory, setActiveCategory] = useState(initialCategory);
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+
+  // Restore filters + scroll position saved just before the user clicked
+  // into a product, so coming back via the browser's back button (or the
+  // product page's own back link) resumes exactly where they left off.
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+
+    const saved = sessionStorage.getItem(SCROLL_STATE_KEY);
+    if (!saved) return;
+
+    try {
+      const { category, search, scrollY } = JSON.parse(saved);
+      if (typeof category === "string") setActiveCategory(category);
+      if (typeof search === "string") setSearchTerm(search);
+      if (typeof scrollY === "number") {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => window.scrollTo(0, scrollY));
+        });
+      }
+    } catch {
+      // ignore malformed saved state
+    }
+  }, []);
+
+  function saveScrollState() {
+    sessionStorage.setItem(
+      SCROLL_STATE_KEY,
+      JSON.stringify({
+        category: activeCategory,
+        search: searchTerm,
+        scrollY: window.scrollY,
+      })
+    );
+  }
+
+  const visibleProducts = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    return products.filter((p) => {
+      const matchesCategory =
+        activeCategory === "All" || p.category === activeCategory;
+      const matchesSearch = term === "" || p.name.toLowerCase().includes(term);
+      return matchesCategory && matchesSearch;
+    });
+  }, [products, activeCategory, searchTerm]);
 
   return (
     <main className="min-h-screen bg-paper">
@@ -281,7 +372,7 @@ function DashboardContent() {
 
             {user ? (
               <button
-                onClick={handleLogout}
+                onClick={onLogout}
                 className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
               >
                 Log out
@@ -414,24 +505,27 @@ function DashboardContent() {
             )}
           </div>
 
-          {/* Category filter */}
-          <div className="mt-6 grid grid-cols-3 gap-2.5">
-            {categoryFilters.map((category) => {
-              const isActive = category === activeCategory;
-              return (
-                <button
-                  key={category}
-                  onClick={() => setActiveCategory(category)}
-                  className={`focus-ring truncate border px-4 py-2 font-body text-sm transition-colors ${
-                    isActive
-                      ? "border-blue bg-blue text-white"
-                      : "border-line bg-paper text-navy-soft hover:border-blue hover:text-blue"
-                  }`}
-                >
-                  {category}
-                </button>
-              );
-            })}
+          {/* Category filter — single scrollable row, sticks to the top
+              of the viewport once you scroll past it */}
+          <div className="sticky top-0 z-10 -mx-6 mt-6 overflow-x-auto bg-paper px-6 py-3 md:-mx-10 md:px-10">
+            <div className="flex w-max gap-2.5">
+              {categoryFilters.map((category) => {
+                const isActive = category === activeCategory;
+                return (
+                  <button
+                    key={category}
+                    onClick={() => setActiveCategory(category)}
+                    className={`focus-ring shrink-0 whitespace-nowrap border px-4 py-2 font-body text-sm transition-colors ${
+                      isActive
+                        ? "border-blue bg-blue text-white"
+                        : "border-line bg-paper text-navy-soft hover:border-blue hover:text-blue"
+                    }`}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Product grid */}
@@ -448,7 +542,7 @@ function DashboardContent() {
                   key={product.id}
                   className="group block border border-line bg-paper transition-colors hover:border-blue"
                 >
-                  <Link href={`/product/${product.id}`}>
+                  <Link href={`/product/${product.id}`} onClick={saveScrollState}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={product.images[0]}
@@ -467,7 +561,7 @@ function DashboardContent() {
                         </p>
                       )}
                     </div>
-                    <Link href={`/product/${product.id}`}>
+                    <Link href={`/product/${product.id}`} onClick={saveScrollState}>
                       <h3 className="mt-1 truncate font-display text-base text-navy hover:text-blue">
                         {product.name}
                       </h3>
@@ -477,7 +571,7 @@ function DashboardContent() {
                     </p>
                     <button
                       type="button"
-                      onClick={() => handleQuickAddToCart(product)}
+                      onClick={() => onQuickAddToCart(product)}
                       disabled={addingProductId === product.id}
                       className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
                     >
@@ -510,17 +604,7 @@ function DashboardContent() {
           </Link>
         </div>
       </div>
-
-      {toast && <Toast message={toast} />}
     </main>
-  );
-}
-
-export default function DashboardPage() {
-  return (
-    <Suspense fallback={null}>
-      <DashboardContent />
-    </Suspense>
   );
 }
 
