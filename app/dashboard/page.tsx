@@ -73,7 +73,8 @@ function DashboardContent() {
     return () => {
       active = false;
     };
-  }, [supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const [addedProductId, setAddedProductId] = useState<string | null>(null);
@@ -170,7 +171,8 @@ function DashboardContent() {
       active = false;
       listener.subscription.unsubscribe();
     };
-  }, [router, supabase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -452,32 +454,30 @@ function DashboardContent() {
                       {product.category}
                     </p>
                     <Link href={`/product/${product.id}`}>
-                      <h3 className="mt-1 font-display text-base text-navy hover:text-blue">
+                      <h3 className="mt-1 truncate font-display text-base text-navy hover:text-blue">
                         {product.name}
                       </h3>
                     </Link>
                     {product.shop_name && (
-                      <p className="font-body text-xs text-navy-soft">
+                      <p className="truncate font-body text-xs text-navy-soft">
                         {product.shop_name}
                       </p>
                     )}
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="font-body text-sm font-medium text-navy">
-                        ₦{product.price.toLocaleString()}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickAddToCart(product)}
-                        disabled={addingProductId === product.id}
-                        className="focus-ring whitespace-nowrap font-body text-sm font-medium text-blue transition-colors hover:text-blue-dark disabled:opacity-60"
-                      >
-                        {addingProductId === product.id
-                          ? "Adding..."
-                          : addedProductId === product.id
-                          ? "✓ Added"
-                          : "Add to cart"}
-                      </button>
-                    </div>
+                    <p className="mt-2 font-body text-sm font-medium text-navy">
+                      ₦{product.price.toLocaleString()}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickAddToCart(product)}
+                      disabled={addingProductId === product.id}
+                      className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+                    >
+                      {addingProductId === product.id
+                        ? "Adding..."
+                        : addedProductId === product.id
+                        ? "✓ Added"
+                        : "Add to cart"}
+                    </button>
                   </div>
                 </div>
               ))}
