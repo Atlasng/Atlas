@@ -130,12 +130,20 @@ export default function ShopDashboardPage() {
         </div>
 
         <div className="mt-10 flex flex-wrap gap-4">
-          <Link
+          {/*
+            Plain <a>, not next/link, on purpose. This route is gated by
+            middleware based on live delivery-pricing data. next/link's
+            client-side router cache can replay a stale redirect from an
+            earlier visit even after the underlying data changes — a real
+            page load guarantees middleware re-runs against current data
+            every time.
+          */}
+          <a
             href="/dashboard/shop/new"
             className="focus-ring bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
           >
             + List a product
-          </Link>
+          </a>
           <Link
             href="/dashboard/shop/products"
             className="focus-ring border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"

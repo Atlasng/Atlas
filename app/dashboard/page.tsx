@@ -567,12 +567,12 @@ function DashboardBody({
               Browse the marketplace
             </h2>
             {hasShop && (
-              <Link
+              <a
                 href="/dashboard/shop/new"
                 className="focus-ring whitespace-nowrap border border-blue px-4 py-2 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
               >
                 + List a product
-              </Link>
+              </a>
             )}
           </div>
 
