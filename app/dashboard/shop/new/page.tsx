@@ -243,12 +243,11 @@ export default function NewProductPage() {
         category,
         images: imageUrls,
         digital_file_path: digitalFilePath,
-        // Array of every size the seller has in stock for this listing —
-        // buyers pick one of these on the product page before adding to cart.
-        sizes: isFashion ? selectedSizes : null,
-        // Optional — only enforced on the buyer side if the seller bothers
-        // to fill it in.
-        colors: colors.length > 0 ? colors : null,
+        // Always an array, never null — products.sizes is NOT NULL, and
+        // the marketplace grid reads .length off both of these fields
+        // without a null check.
+        sizes: isFashion ? selectedSizes : [],
+        colors: colors.length > 0 ? colors : [],
       });
 
       if (insertError) {

@@ -65,7 +65,14 @@ export default function DashboardPage() {
       .select("id, name, category, price, price_type, images, sizes, colors, shop_name, shop_phone")
       .then(({ data }) => {
         if (!active) return;
-        const list = (data as unknown as Product[]) ?? [];
+        // Older rows (or anything inserted outside the app) may still have
+        // null here even though the column is meant to always be an array —
+        // coalesce so `.length` never throws while rendering the grid.
+        const list = ((data as unknown as Product[]) ?? []).map((p) => ({
+          ...p,
+          sizes: p.sizes ?? [],
+          colors: p.colors ?? [],
+        }));
         for (let i = list.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
           [list[i], list[j]] = [list[j], list[i]];
@@ -137,11 +144,6 @@ export default function DashboardPage() {
   async function handleLogout() {
     await supabase.auth.signOut();
     router.replace("/login");
-  }
-
-  function handleQuickDropship(product: Product) {
-    // TODO: hook up real dropship behavior once it's decided.
-    setToast(`Dropship for "${product.name}" — coming soon.`);
   }
 
   function handleQuickNegotiate(product: Product) {
@@ -249,7 +251,6 @@ export default function DashboardPage() {
         onLogout={handleLogout}
         onQuickAddToCart={handleQuickAddToCart}
         onQuickNegotiate={handleQuickNegotiate}
-        onQuickDropship={handleQuickDropship}
       />
       {toast && <Toast message={toast} />}
     </Suspense>
@@ -271,7 +272,6 @@ function DashboardBody({
   onLogout,
   onQuickAddToCart,
   onQuickNegotiate,
-  onQuickDropship,
 }: {
   user: User | null;
   name: string;
@@ -287,7 +287,6 @@ function DashboardBody({
   onLogout: () => void;
   onQuickAddToCart: (product: Product) => void;
   onQuickNegotiate: (product: Product) => void;
-  onQuickDropship: (product: Product) => void;
 }) {
   const searchParams = useSearchParams();
   const restoredRef = useRef(false);
@@ -617,27 +616,18 @@ function DashboardBody({
                         Negotiate on WhatsApp
                       </button>
                     ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => onQuickAddToCart(product)}
-                          disabled={addingProductId === product.id}
-                          className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-                        >
-                          {addingProductId === product.id
-                            ? "Adding..."
-                            : addedProductId === product.id
-                            ? "✓ Added"
-                            : "Add to cart"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => onQuickDropship(product)}
-                          className="focus-ring mt-2 w-full border border-blue px-4 py-2 font-body text-xs font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-                        >
-                          Dropship
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => onQuickAddToCart(product)}
+                        disabled={addingProductId === product.id}
+                        className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+                      >
+                        {addingProductId === product.id
+                          ? "Adding..."
+                          : addedProductId === product.id
+                          ? "✓ Added"
+                          : "Add to cart"}
+                      </button>
                     )}
                   </div>
                 </div>
