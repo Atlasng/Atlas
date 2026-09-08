@@ -26,7 +26,7 @@ type Comment = {
   id: string;
   comment: string;
   created_at: string;
-  profiles: { full_name: string | null } | null;
+  profiles: { full_name: string | null; avatar_url: string | null } | null;
 };
 
 export default function ProductPage() {
@@ -193,7 +193,7 @@ export default function ProductPage() {
 
       const { data: commentData } = await supabase
         .from("product_comments")
-        .select("id, comment, created_at, profiles(full_name)")
+        .select("id, comment, created_at, profiles(full_name, avatar_url)")
         .eq("product_id", id)
         .order("created_at", { ascending: false });
       setComments((commentData as unknown as Comment[]) ?? []);
@@ -237,7 +237,7 @@ export default function ProductPage() {
     setCommentText("");
     const { data: commentData } = await supabase
       .from("product_comments")
-      .select("id, comment, created_at, profiles(full_name)")
+      .select("id, comment, created_at, profiles(full_name, avatar_url)")
       .eq("product_id", id)
       .order("created_at", { ascending: false });
     setComments((commentData as unknown as Comment[]) ?? []);
@@ -509,18 +509,30 @@ export default function ProductPage() {
             </p>
           ) : (
             comments.map((c) => (
-              <div key={c.id} className="border border-line bg-paper p-4">
-                <p className="font-body text-sm font-medium text-navy">
-                  {c.profiles?.full_name || "Anonymous buyer"}
-                </p>
-                <p className="mt-1 font-body text-sm text-navy-soft">{c.comment}</p>
-                <p className="mt-2 font-body text-xs text-navy-soft">
-                  {new Date(c.created_at).toLocaleDateString("en-NG", {
-                    day: "numeric",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </p>
+              <div key={c.id} className="flex gap-3 border border-line bg-paper p-4">
+                <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
+                  {c.profiles?.avatar_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={c.profiles.avatar_url}
+                      alt={c.profiles?.full_name || "Anonymous buyer"}
+                      className="h-full w-full object-cover"
+                    />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p className="font-body text-sm font-medium text-navy">
+                    {c.profiles?.full_name || "Anonymous buyer"}
+                  </p>
+                  <p className="mt-1 font-body text-sm text-navy-soft">{c.comment}</p>
+                  <p className="mt-2 font-body text-xs text-navy-soft">
+                    {new Date(c.created_at).toLocaleDateString("en-NG", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
               </div>
             ))
           )}

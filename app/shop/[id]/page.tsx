@@ -25,8 +25,19 @@ type Review = {
   rating: number;
   comment: string | null;
   created_at: string;
-  profiles: { full_name: string | null } | null;
+  profiles: { full_name: string | null; avatar_url: string | null } | null;
 };
+
+function Avatar({ url, name, size = "h-9 w-9" }: { url: string | null | undefined; name: string; size?: string }) {
+  return (
+    <div className={`${size} shrink-0 overflow-hidden rounded-full border border-line bg-ice`}>
+      {url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={name} className="h-full w-full object-cover" />
+      )}
+    </div>
+  );
+}
 
 function Stars({ value, size = "text-sm" }: { value: number; size?: string }) {
   return (
@@ -47,6 +58,7 @@ export default function ShopFrontPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [logoLightboxOpen, setLogoLightboxOpen] = useState(false);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -80,7 +92,7 @@ export default function ShopFrontPage() {
           .order("created_at", { ascending: false }),
         supabase
           .from("shop_reviews")
-          .select("id, user_id, rating, comment, created_at, profiles(full_name)")
+          .select("id, user_id, rating, comment, created_at, profiles(full_name, avatar_url)")
           .eq("shop_id", shopId)
           .order("created_at", { ascending: false }),
         supabase
@@ -229,12 +241,18 @@ export default function ShopFrontPage() {
       <div className="mx-auto max-w-content px-6 py-12 md:px-10">
         {/* Shop header */}
         <div className="flex flex-wrap items-center gap-5">
-          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
+          <button
+            type="button"
+            onClick={() => shop.logo_url && setLogoLightboxOpen(true)}
+            disabled={!shop.logo_url}
+            aria-label={shop.logo_url ? "View full profile picture" : undefined}
+            className="focus-ring h-20 w-20 shrink-0 overflow-hidden rounded-full border border-line bg-ice disabled:cursor-default"
+          >
             {shop.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={shop.logo_url} alt={shop.shop_name} className="h-full w-full object-cover" />
             )}
-          </div>
+          </button>
           <div className="flex-1">
             <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
               {shop.shop_name}
@@ -355,29 +373,55 @@ export default function ShopFrontPage() {
               </p>
             ) : (
               reviews.map((review) => (
-                <div key={review.id} className="border border-line bg-paper p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="font-body text-sm font-medium text-navy">
-                      {review.profiles?.full_name || "Anonymous buyer"}
+                <div key={review.id} className="flex gap-3 border border-line bg-paper p-4">
+                  <Avatar url={review.profiles?.avatar_url} name={review.profiles?.full_name || "Anonymous buyer"} />
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-body text-sm font-medium text-navy">
+                        {review.profiles?.full_name || "Anonymous buyer"}
+                      </p>
+                      <Stars value={review.rating} />
+                    </div>
+                    {review.comment && (
+                      <p className="mt-2 font-body text-sm text-navy-soft">{review.comment}</p>
+                    )}
+                    <p className="mt-2 font-body text-xs text-navy-soft">
+                      {new Date(review.created_at).toLocaleDateString("en-NG", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
                     </p>
-                    <Stars value={review.rating} />
                   </div>
-                  {review.comment && (
-                    <p className="mt-2 font-body text-sm text-navy-soft">{review.comment}</p>
-                  )}
-                  <p className="mt-2 font-body text-xs text-navy-soft">
-                    {new Date(review.created_at).toLocaleDateString("en-NG", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </p>
                 </div>
               ))
             )}
           </div>
         </div>
       </div>
+
+      {/* Profile picture lightbox */}
+      {logoLightboxOpen && shop.logo_url && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-navy/95 px-4"
+          onClick={() => setLogoLightboxOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setLogoLightboxOpen(false)}
+            aria-label="Close"
+            className="focus-ring absolute right-5 top-5 flex h-10 w-10 items-center justify-center text-2xl text-white"
+          >
+            ×
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={shop.logo_url}
+            alt={shop.shop_name}
+            className="max-h-[85vh] max-w-full rounded-full object-contain"
+          />
+        </div>
+      )}
     </main>
   );
 }

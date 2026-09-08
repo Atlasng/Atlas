@@ -402,6 +402,15 @@ function DashboardBody({
 
             {user && (
               <Link
+                href="/account"
+                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+              >
+                My account
+              </Link>
+            )}
+
+            {user && (
+              <Link
                 href="/orders"
                 className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
               >
