@@ -415,14 +415,14 @@ function DashboardContent() {
           </div>
 
           {/* Category filter */}
-          <div className="mt-6 flex flex-wrap gap-2.5">
+          <div className="mt-6 grid grid-cols-3 gap-2.5">
             {categoryFilters.map((category) => {
               const isActive = category === activeCategory;
               return (
                 <button
                   key={category}
                   onClick={() => setActiveCategory(category)}
-                  className={`focus-ring whitespace-nowrap border px-4 py-2 font-body text-sm transition-colors ${
+                  className={`focus-ring truncate border px-4 py-2 font-body text-sm transition-colors ${
                     isActive
                       ? "border-blue bg-blue text-white"
                       : "border-line bg-paper text-navy-soft hover:border-blue hover:text-blue"
@@ -457,19 +457,21 @@ function DashboardContent() {
                     />
                   </Link>
                   <div className="p-4">
-                    <p className="font-body text-xs text-navy-soft">
-                      {product.category}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate font-body text-xs text-navy-soft">
+                        {product.category}
+                      </p>
+                      {product.shop_name && (
+                        <p className="shrink-0 truncate font-body text-xs font-bold uppercase text-navy-soft">
+                          {product.shop_name}
+                        </p>
+                      )}
+                    </div>
                     <Link href={`/product/${product.id}`}>
                       <h3 className="mt-1 truncate font-display text-base text-navy hover:text-blue">
                         {product.name}
                       </h3>
                     </Link>
-                    {product.shop_name && (
-                      <p className="truncate font-body text-xs text-navy-soft">
-                        {product.shop_name}
-                      </p>
-                    )}
                     <p className="mt-2 font-body text-sm font-medium text-navy">
                       ₦{product.price.toLocaleString()}
                     </p>
