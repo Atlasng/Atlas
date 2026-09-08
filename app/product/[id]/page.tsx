@@ -24,9 +24,9 @@ type Product = {
 
 type Comment = {
   id: string;
-  author_name: string | null;
   comment: string;
   created_at: string;
+  profiles: { full_name: string | null } | null;
 };
 
 export default function ProductPage() {
@@ -49,7 +49,6 @@ export default function ProductPage() {
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState("");
-  const [commentName, setCommentName] = useState("");
   const [commentError, setCommentError] = useState("");
   const [postingComment, setPostingComment] = useState(false);
 
@@ -194,10 +193,10 @@ export default function ProductPage() {
 
       const { data: commentData } = await supabase
         .from("product_comments")
-        .select("id, author_name, comment, created_at")
+        .select("id, comment, created_at, profiles(full_name)")
         .eq("product_id", id)
         .order("created_at", { ascending: false });
-      setComments((commentData as Comment[]) ?? []);
+      setComments((commentData as unknown as Comment[]) ?? []);
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -226,7 +225,6 @@ export default function ProductPage() {
       product_id: id,
       user_id: session.user.id,
       comment: commentText.trim(),
-      author_name: commentName.trim() || "Anonymous buyer",
     });
 
     setPostingComment(false);
@@ -239,10 +237,10 @@ export default function ProductPage() {
     setCommentText("");
     const { data: commentData } = await supabase
       .from("product_comments")
-      .select("id, author_name, comment, created_at")
+      .select("id, comment, created_at, profiles(full_name)")
       .eq("product_id", id)
       .order("created_at", { ascending: false });
-    setComments((commentData as Comment[]) ?? []);
+    setComments((commentData as unknown as Comment[]) ?? []);
   }
 
   function showPrev() {
@@ -352,7 +350,8 @@ export default function ProductPage() {
               href={`/shop/${product.shop_id}`}
               className="mt-2 inline-block font-body text-sm text-navy-soft hover:text-blue"
             >
-              Sold by {product.shop_name}
+              Sold by{" "}
+              <span className="font-bold uppercase underline">{product.shop_name}</span>
             </Link>
           )}
           <p className="mt-6 font-display text-2xl text-navy">
@@ -483,19 +482,12 @@ export default function ProductPage() {
         </h2>
 
         <div className="mt-6 max-w-lg border border-line bg-ice p-5">
-          <input
-            type="text"
-            value={commentName}
-            onChange={(e) => setCommentName(e.target.value)}
-            placeholder="Your name (optional)"
-            className="focus-ring w-full border border-line bg-paper px-4 py-2.5 font-body text-sm text-navy placeholder:text-navy-soft/60"
-          />
           <textarea
             rows={3}
             value={commentText}
             onChange={(e) => setCommentText(e.target.value)}
             placeholder="Ask a question or leave a comment about this product"
-            className="focus-ring mt-2 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+            className="focus-ring w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
           />
           {commentError && (
             <p className="mt-2 font-body text-sm text-red-700">{commentError}</p>
@@ -519,7 +511,7 @@ export default function ProductPage() {
             comments.map((c) => (
               <div key={c.id} className="border border-line bg-paper p-4">
                 <p className="font-body text-sm font-medium text-navy">
-                  {c.author_name || "Anonymous buyer"}
+                  {c.profiles?.full_name || "Anonymous buyer"}
                 </p>
                 <p className="mt-1 font-body text-sm text-navy-soft">{c.comment}</p>
                 <p className="mt-2 font-body text-xs text-navy-soft">

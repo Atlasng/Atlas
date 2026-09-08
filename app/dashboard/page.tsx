@@ -598,7 +598,7 @@ function DashboardBody({
                         <Link
                           href={`/shop/${product.shop_id}`}
                           onClick={(e) => e.stopPropagation()}
-                          className="focus-ring shrink-0 truncate font-body text-xs font-bold uppercase text-navy-soft hover:text-blue"
+                          className="focus-ring shrink-0 truncate font-body text-xs font-bold uppercase text-navy-soft underline hover:text-blue"
                         >
                           {product.shop_name}
                         </Link>

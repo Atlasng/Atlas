@@ -24,8 +24,8 @@ type Review = {
   user_id: string;
   rating: number;
   comment: string | null;
-  author_name: string | null;
   created_at: string;
+  profiles: { full_name: string | null } | null;
 };
 
 function Stars({ value, size = "text-sm" }: { value: number; size?: string }) {
@@ -55,7 +55,6 @@ export default function ShopFrontPage() {
 
   const [myRating, setMyRating] = useState(0);
   const [myComment, setMyComment] = useState("");
-  const [myName, setMyName] = useState("");
   const [reviewError, setReviewError] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
@@ -81,7 +80,7 @@ export default function ShopFrontPage() {
           .order("created_at", { ascending: false }),
         supabase
           .from("shop_reviews")
-          .select("id, user_id, rating, comment, author_name, created_at")
+          .select("id, user_id, rating, comment, created_at, profiles(full_name)")
           .eq("shop_id", shopId)
           .order("created_at", { ascending: false }),
         supabase
@@ -115,7 +114,6 @@ export default function ShopFrontPage() {
       if (mine) {
         setMyRating(mine.rating);
         setMyComment(mine.comment ?? "");
-        setMyName(mine.author_name ?? "");
       }
     }
 
@@ -171,7 +169,6 @@ export default function ShopFrontPage() {
         user_id: userId,
         rating: myRating,
         comment: myComment.trim() || null,
-        author_name: myName.trim() || "Anonymous buyer",
       },
       { onConflict: "shop_id,user_id" }
     );
@@ -330,19 +327,12 @@ export default function ShopFrontPage() {
                 </button>
               ))}
             </div>
-            <input
-              type="text"
-              value={myName}
-              onChange={(e) => setMyName(e.target.value)}
-              placeholder="Your name (optional)"
-              className="focus-ring mt-3 w-full border border-line bg-paper px-4 py-2.5 font-body text-sm text-navy placeholder:text-navy-soft/60"
-            />
             <textarea
               rows={3}
               value={myComment}
               onChange={(e) => setMyComment(e.target.value)}
               placeholder="Share your experience with this shop (optional)"
-              className="focus-ring mt-2 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+              className="focus-ring mt-3 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
             />
             {reviewError && (
               <p className="mt-2 font-body text-sm text-red-700">{reviewError}</p>
@@ -368,7 +358,7 @@ export default function ShopFrontPage() {
                 <div key={review.id} className="border border-line bg-paper p-4">
                   <div className="flex items-center justify-between">
                     <p className="font-body text-sm font-medium text-navy">
-                      {review.author_name || "Anonymous buyer"}
+                      {review.profiles?.full_name || "Anonymous buyer"}
                     </p>
                     <Stars value={review.rating} />
                   </div>
