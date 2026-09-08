@@ -28,7 +28,6 @@ export default function ProductPage() {
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
-  const [redirecting, setRedirecting] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
@@ -100,31 +99,7 @@ export default function ProductPage() {
         .eq("id", id)
         .maybeSingle();
 
-      const fetchedProduct = data as Product | null;
-
-      if (fetchedProduct) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-
-        if (session) {
-          const { data: shop } = await supabase
-            .from("shops")
-            .select("id")
-            .eq("user_id", session.user.id)
-            .maybeSingle();
-
-          // Only redirect to edit if this viewer owns THIS product's shop —
-          // never for anyone else's listings, and never for guests/buyers.
-          if (shop && shop.id === fetchedProduct.shop_id) {
-            setRedirecting(true);
-            router.replace(`/dashboard/shop/products/${id}/edit`);
-            return;
-          }
-        }
-      }
-
-      setProduct(fetchedProduct);
+      setProduct(data as Product | null);
       setLoading(false);
     }
     load();
@@ -141,7 +116,7 @@ export default function ProductPage() {
     setActiveIndex((i) => (i === product.images.length - 1 ? 0 : i + 1));
   }
 
-  if (loading || redirecting) {
+  if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
         <p className="font-body text-sm text-navy-soft">Loading...</p>
