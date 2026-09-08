@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useCart } from "@/lib/cart-context";
 
 type CartItem = {
   id: string;
   quantity: number;
+  size: string;
   products: {
     id: string;
     name: string;
@@ -21,6 +23,7 @@ type CartItem = {
 export default function CartPage() {
   const router = useRouter();
   const supabase = createClient();
+  const { refresh: refreshCart } = useCart();
 
   const [items, setItems] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +43,7 @@ export default function CartPage() {
     const { data } = await supabase
       .from("cart_items")
       .select(
-        "id, quantity, products(id, name, price, category, images, shop_name)"
+        "id, quantity, size, products(id, name, price, category, images, shop_name)"
       )
       .eq("user_id", session.user.id);
 
@@ -59,11 +62,13 @@ export default function CartPage() {
     setItems((prev) =>
       prev.map((item) => (item.id === itemId ? { ...item, quantity } : item))
     );
+    await refreshCart();
   }
 
   async function removeItem(itemId: string) {
     await supabase.from("cart_items").delete().eq("id", itemId);
     setItems((prev) => prev.filter((item) => item.id !== itemId));
+    await refreshCart();
   }
 
   async function handleCheckout() {
@@ -114,6 +119,9 @@ export default function CartPage() {
         <div className="flex flex-1 flex-col justify-between">
           <div>
             <h3 className="font-display text-base text-navy">{product.name}</h3>
+            {item.size && (
+              <p className="font-body text-xs text-navy-soft">Size: {item.size}</p>
+            )}
             {product.shop_name && (
               <p className="font-body text-xs text-navy-soft">
                 Sold by {product.shop_name}

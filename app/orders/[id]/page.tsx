@@ -11,6 +11,7 @@ type OrderItem = {
   price: number;
   quantity: number;
   is_digital: boolean;
+  size: string | null;
 };
 
 type Order = {
@@ -55,7 +56,7 @@ export default function OrderPage() {
 
       const { data: itemsData } = await supabase
         .from("order_items")
-        .select("id, product_name, price, quantity, is_digital")
+        .select("id, product_name, price, quantity, is_digital, size")
         .eq("order_id", id);
 
       setOrder(orderData);
@@ -147,6 +148,7 @@ export default function OrderPage() {
                 <p className="font-body text-sm text-navy">{item.product_name}</p>
                 <p className="font-body text-xs text-navy-soft">
                   Qty {item.quantity} · ₦{item.price.toLocaleString()} each
+                  {item.size && ` · Size ${item.size}`}
                 </p>
               </div>
               {item.is_digital && order.status === "paid" && (

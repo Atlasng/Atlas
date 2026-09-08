@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useCart } from "@/lib/cart-context";
 import type { User } from "@supabase/supabase-js";
 
 type Product = {
@@ -12,6 +13,7 @@ type Product = {
   category: string;
   price: number;
   images: string[];
+  sizes: string[];
   shop_name: string | null;
 };
 
@@ -31,6 +33,7 @@ const categoryFilters = [
 function DashboardContent() {
   const router = useRouter();
   const supabase = createClient();
+  const { count: cartCount, refresh: refreshCart } = useCart();
   const searchParams = useSearchParams();
 
   const categoryParam = searchParams.get("category");
@@ -53,7 +56,7 @@ function DashboardContent() {
 
     supabase
       .from("products")
-      .select("id, name, category, price, images, shop_name")
+      .select("id, name, category, price, images, sizes, shop_name")
       .then(({ data }) => {
         if (!active) return;
         const list = (data as unknown as Product[]) ?? [];
@@ -71,6 +74,56 @@ function DashboardContent() {
       active = false;
     };
   }, [supabase]);
+
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
+  const [addedProductId, setAddedProductId] = useState<string | null>(null);
+
+  async function handleQuickAddToCart(product: Product) {
+    if (product.sizes.length > 0) {
+      // Sizes require a choice — send them to the product page instead of
+      // guessing which one to add.
+      router.push(`/product/${product.id}`);
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    setAddingProductId(product.id);
+
+    const { data: existing } = await supabase
+      .from("cart_items")
+      .select("id, quantity")
+      .eq("user_id", session.user.id)
+      .eq("product_id", product.id)
+      .eq("size", "")
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("cart_items")
+        .update({ quantity: existing.quantity + 1 })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("cart_items").insert({
+        user_id: session.user.id,
+        product_id: product.id,
+        quantity: 1,
+        size: "",
+      });
+    }
+
+    await refreshCart();
+    setAddingProductId(null);
+    setAddedProductId(product.id);
+    setTimeout(() => setAddedProductId(null), 1500);
+  }
 
   useEffect(() => {
     let active = true;
@@ -187,8 +240,8 @@ function DashboardContent() {
 
             <Link
               href="/cart"
-              aria-label="Cart, 0 items"
-              className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
+              aria-label={`Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`}
+              className="focus-ring relative shrink-0 text-navy-soft transition-colors hover:text-navy"
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <path
@@ -201,6 +254,11 @@ function DashboardContent() {
                 <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
                 <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
               </svg>
+              {cartCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center bg-blue px-1 font-body text-[10px] font-medium leading-none text-white">
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
 
             {user && (
@@ -377,24 +435,27 @@ function DashboardContent() {
           ) : (
             <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
               {visibleProducts.map((product) => (
-                <Link
+                <div
                   key={product.id}
-                  href={`/product/${product.id}`}
                   className="group block border border-line bg-paper transition-colors hover:border-blue"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={product.images[0]}
-                    alt={product.name}
-                    className="h-40 w-full object-cover sm:h-48"
-                  />
+                  <Link href={`/product/${product.id}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={product.images[0]}
+                      alt={product.name}
+                      className="h-40 w-full object-cover sm:h-48"
+                    />
+                  </Link>
                   <div className="p-4">
                     <p className="font-body text-xs text-navy-soft">
                       {product.category}
                     </p>
-                    <h3 className="mt-1 font-display text-base text-navy">
-                      {product.name}
-                    </h3>
+                    <Link href={`/product/${product.id}`}>
+                      <h3 className="mt-1 font-display text-base text-navy hover:text-blue">
+                        {product.name}
+                      </h3>
+                    </Link>
                     {product.shop_name && (
                       <p className="font-body text-xs text-navy-soft">
                         {product.shop_name}
@@ -404,12 +465,21 @@ function DashboardContent() {
                       <span className="font-body text-sm font-medium text-navy">
                         ₦{product.price.toLocaleString()}
                       </span>
-                      <span className="font-body text-sm font-medium text-blue">
-                        View
-                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickAddToCart(product)}
+                        disabled={addingProductId === product.id}
+                        className="focus-ring whitespace-nowrap font-body text-sm font-medium text-blue transition-colors hover:text-blue-dark disabled:opacity-60"
+                      >
+                        {addingProductId === product.id
+                          ? "Adding..."
+                          : addedProductId === product.id
+                          ? "✓ Added"
+                          : "Add to cart"}
+                      </button>
                     </div>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}

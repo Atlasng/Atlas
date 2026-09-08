@@ -9,6 +9,8 @@ const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_DIGITAL_FILE_BYTES = 200 * 1024 * 1024; // 200MB
 
+const standardSizes = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "One size"];
+
 const productCategories = [
   "Electronics",
   "Fashion",
@@ -41,7 +43,7 @@ export default function NewProductPage() {
   const [category, setCategory] = useState(productCategories[0]);
   const [images, setImages] = useState<PickedImage[]>([]);
   const [digitalFile, setDigitalFile] = useState<File | null>(null);
-  const [size, setSize] = useState("");
+  const [size, setSize] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [uploadStatus, setUploadStatus] = useState("");
@@ -134,8 +136,8 @@ export default function NewProductPage() {
       setError("Add the file buyers will download after paying.");
       return;
     }
-    if (isFashion && !size.trim()) {
-      setError("Enter a size.");
+    if (isFashion && size.length === 0) {
+      setError("Select at least one size.");
       return;
     }
 
@@ -201,7 +203,7 @@ export default function NewProductPage() {
         category,
         images: imageUrls,
         digital_file_path: digitalFilePath,
-        size: isFashion ? size.trim() : null,
+        sizes: isFashion ? size : [],
       });
 
       if (insertError) {
@@ -393,18 +395,35 @@ export default function NewProductPage() {
 
           {isFashion && (
             <div>
-              <label htmlFor="size" className="font-body text-sm font-medium text-navy">
-                Size
+              <label className="font-body text-sm font-medium text-navy">
+                Sizes in stock
               </label>
-              <input
-                id="size"
-                type="text"
-                required
-                value={size}
-                onChange={(e) => setSize(e.target.value)}
-                placeholder="e.g. M, 42, or One size"
-                className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
-              />
+              <p className="mt-1 font-body text-xs text-navy-soft">
+                Select every size you currently have.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {standardSizes.map((s) => {
+                  const isSelected = size.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() =>
+                        setSize((prev) =>
+                          isSelected ? prev.filter((v) => v !== s) : [...prev, s]
+                        )
+                      }
+                      className={`focus-ring border px-4 py-2 font-body text-sm transition-colors ${
+                        isSelected
+                          ? "border-blue bg-blue text-white"
+                          : "border-line bg-ice text-navy-soft hover:border-blue hover:text-blue"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -9,6 +9,8 @@ const MAX_IMAGES = 5;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10MB
 const MAX_DIGITAL_FILE_BYTES = 200 * 1024 * 1024; // 200MB
 
+const standardSizes = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "One size"];
+
 const productCategories = [
   "Electronics",
   "Fashion",
@@ -37,7 +39,7 @@ export default function EditProductPage() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState(productCategories[0]);
-  const [size, setSize] = useState("");
+  const [size, setSize] = useState<string[]>([]);
   const [existingImages, setExistingImages] = useState<string[]>([]);
   const [newImages, setNewImages] = useState<NewImage[]>([]);
   const [existingDigitalFilePath, setExistingDigitalFilePath] = useState<string | null>(null);
@@ -73,7 +75,7 @@ export default function EditProductPage() {
 
       const { data: product } = await supabase
         .from("products")
-        .select("name, description, price, category, images, size, shop_id, digital_file_path")
+        .select("name, description, price, category, images, sizes, shop_id, digital_file_path")
         .eq("id", id)
         .maybeSingle();
 
@@ -87,7 +89,7 @@ export default function EditProductPage() {
       setDescription(product.description ?? "");
       setPrice(String(product.price));
       setCategory(product.category);
-      setSize(product.size ?? "");
+      setSize(product.sizes ?? []);
       setExistingImages(product.images ?? []);
       setExistingDigitalFilePath(product.digital_file_path ?? null);
       setChecking(false);
@@ -155,8 +157,8 @@ export default function EditProductPage() {
       setError("Keep at least one photo.");
       return;
     }
-    if (isFashion && !size.trim()) {
-      setError("Enter a size.");
+    if (isFashion && size.length === 0) {
+      setError("Select at least one size.");
       return;
     }
     if (isDigitalProduct && !existingDigitalFilePath && !newDigitalFile) {
@@ -219,7 +221,7 @@ export default function EditProductPage() {
           description: description.trim() || null,
           price: priceNumber,
           category,
-          size: isFashion ? size.trim() : null,
+          sizes: isFashion ? size : [],
           images: [...existingImages, ...uploadedUrls],
           digital_file_path: isDigitalProduct ? digitalFilePath : null,
         })
@@ -452,18 +454,35 @@ export default function EditProductPage() {
 
           {isFashion && (
             <div>
-              <label htmlFor="size" className="font-body text-sm font-medium text-navy">
-                Size
+              <label className="font-body text-sm font-medium text-navy">
+                Sizes in stock
               </label>
-              <input
-                id="size"
-                type="text"
-                required
-                value={size}
-                onChange={(e) => setSize(e.target.value)}
-                placeholder="e.g. M, 42, or One size"
-                className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
-              />
+              <p className="mt-1 font-body text-xs text-navy-soft">
+                Select every size you currently have.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {standardSizes.map((s) => {
+                  const isSelected = size.includes(s);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() =>
+                        setSize((prev) =>
+                          isSelected ? prev.filter((v) => v !== s) : [...prev, s]
+                        )
+                      }
+                      className={`focus-ring border px-4 py-2 font-body text-sm transition-colors ${
+                        isSelected
+                          ? "border-blue bg-blue text-white"
+                          : "border-line bg-ice text-navy-soft hover:border-blue hover:text-blue"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

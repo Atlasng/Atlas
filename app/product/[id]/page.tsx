@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useCart } from "@/lib/cart-context";
 
 type Product = {
   id: string;
@@ -13,7 +14,7 @@ type Product = {
   price: number;
   category: string;
   images: string[];
-  size: string | null;
+  sizes: string[];
   digital_file_path: string | null;
   shop_name: string | null;
 };
@@ -22,6 +23,7 @@ export default function ProductPage() {
   const params = useParams();
   const router = useRouter();
   const supabase = createClient();
+  const { refresh: refreshCart } = useCart();
   const id = params.id as string;
 
   const [product, setProduct] = useState<Product | null>(null);
@@ -29,12 +31,19 @@ export default function ProductPage() {
   const [redirecting, setRedirecting] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [addingToCart, setAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
   const [cartError, setCartError] = useState("");
 
   async function handleAddToCart() {
     setCartError("");
+
+    if (product && product.sizes.length > 0 && !selectedSize) {
+      setCartError("Select a size first.");
+      return;
+    }
+
     setAddingToCart(true);
 
     const {
@@ -46,11 +55,14 @@ export default function ProductPage() {
       return;
     }
 
+    const sizeValue = selectedSize ?? "";
+
     const { data: existing } = await supabase
       .from("cart_items")
       .select("id, quantity")
       .eq("user_id", session.user.id)
       .eq("product_id", id)
+      .eq("size", sizeValue)
       .maybeSingle();
 
     if (existing) {
@@ -59,9 +71,12 @@ export default function ProductPage() {
         .update({ quantity: existing.quantity + 1 })
         .eq("id", existing.id);
     } else {
-      const { error } = await supabase
-        .from("cart_items")
-        .insert({ user_id: session.user.id, product_id: id, quantity: 1 });
+      const { error } = await supabase.from("cart_items").insert({
+        user_id: session.user.id,
+        product_id: id,
+        quantity: 1,
+        size: sizeValue,
+      });
       if (error) {
         setCartError(error.message);
         setAddingToCart(false);
@@ -69,6 +84,7 @@ export default function ProductPage() {
       }
     }
 
+    await refreshCart();
     setAddingToCart(false);
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
@@ -79,7 +95,7 @@ export default function ProductPage() {
       const { data } = await supabase
         .from("products")
         .select(
-          "id, shop_id, name, description, price, category, images, size, digital_file_path, shop_name"
+          "id, shop_id, name, description, price, category, images, sizes, digital_file_path, shop_name"
         )
         .eq("id", id)
         .maybeSingle();
@@ -216,10 +232,26 @@ export default function ProductPage() {
             ₦{product.price.toLocaleString()}
           </p>
 
-          {product.size && (
-            <p className="mt-3 font-body text-sm text-navy">
-              <span className="text-navy-soft">Size:</span> {product.size}
-            </p>
+          {product.sizes.length > 0 && (
+            <div className="mt-4">
+              <p className="font-body text-sm text-navy-soft">Size</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {product.sizes.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSelectedSize(s)}
+                    className={`focus-ring border px-4 py-2 font-body text-sm transition-colors ${
+                      selectedSize === s
+                        ? "border-blue bg-blue text-white"
+                        : "border-line bg-ice text-navy hover:border-blue"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
 
           {product.digital_file_path && (

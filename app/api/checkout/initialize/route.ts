@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const { data: cartItems, error: cartError } = await admin
     .from("cart_items")
     .select(
-      "quantity, products(id, name, price, category, shop_id, digital_file_path)"
+      "quantity, size, products(id, name, price, category, shop_id, digital_file_path)"
     )
     .eq("user_id", user.id);
 
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
 
   type CartRow = {
     quantity: number;
+    size: string;
     products: {
       id: string;
       name: string;
@@ -87,6 +88,7 @@ export async function POST(request: NextRequest) {
     quantity: row.quantity,
     is_digital: row.products!.category === "Digital Products",
     digital_file_path: row.products!.digital_file_path,
+    size: row.size || null,
   }));
 
   const { error: itemsError } = await admin.from("order_items").insert(orderItems);
