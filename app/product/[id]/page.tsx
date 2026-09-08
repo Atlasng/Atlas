@@ -22,6 +22,13 @@ type Product = {
   shop_phone: string | null;
 };
 
+type Comment = {
+  id: string;
+  author_name: string | null;
+  comment: string;
+  created_at: string;
+};
+
 export default function ProductPage() {
   const params = useParams();
   const router = useRouter();
@@ -39,6 +46,12 @@ export default function ProductPage() {
   const [addedToCart, setAddedToCart] = useState(false);
   const [cartError, setCartError] = useState("");
   const [dropshipMessage, setDropshipMessage] = useState("");
+
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentName, setCommentName] = useState("");
+  const [commentError, setCommentError] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
 
   const hasSizes = Boolean(product?.sizes && product.sizes.length > 0);
   const hasColors = Boolean(product?.colors && product.colors.length > 0);
@@ -178,10 +191,59 @@ export default function ProductPage() {
 
       setProduct(fetchedProduct);
       setLoading(false);
+
+      const { data: commentData } = await supabase
+        .from("product_comments")
+        .select("id, author_name, comment, created_at")
+        .eq("product_id", id)
+        .order("created_at", { ascending: false });
+      setComments((commentData as Comment[]) ?? []);
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  async function handlePostComment() {
+    setCommentError("");
+
+    if (!commentText.trim()) {
+      setCommentError("Write something first.");
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    setPostingComment(true);
+
+    const { error } = await supabase.from("product_comments").insert({
+      product_id: id,
+      user_id: session.user.id,
+      comment: commentText.trim(),
+      author_name: commentName.trim() || "Anonymous buyer",
+    });
+
+    setPostingComment(false);
+
+    if (error) {
+      setCommentError(error.message);
+      return;
+    }
+
+    setCommentText("");
+    const { data: commentData } = await supabase
+      .from("product_comments")
+      .select("id, author_name, comment, created_at")
+      .eq("product_id", id)
+      .order("created_at", { ascending: false });
+    setComments((commentData as Comment[]) ?? []);
+  }
 
   function showPrev() {
     if (!product) return;
@@ -286,9 +348,12 @@ export default function ProductPage() {
             {product.name}
           </h1>
           {product.shop_name && (
-            <p className="mt-2 font-body text-sm text-navy-soft">
+            <Link
+              href={`/shop/${product.shop_id}`}
+              className="mt-2 inline-block font-body text-sm text-navy-soft hover:text-blue"
+            >
               Sold by {product.shop_name}
-            </p>
+            </Link>
           )}
           <p className="mt-6 font-display text-2xl text-navy">
             {isNegotiable && (
@@ -407,6 +472,65 @@ export default function ProductPage() {
           )}
           {dropshipMessage && (
             <p className="mt-3 font-body text-sm text-navy-soft">{dropshipMessage}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Comments */}
+      <div className="mx-auto max-w-content border-t border-line px-6 py-12 md:px-10">
+        <h2 className="font-display text-2xl tracking-tightest text-navy">
+          Comments
+        </h2>
+
+        <div className="mt-6 max-w-lg border border-line bg-ice p-5">
+          <input
+            type="text"
+            value={commentName}
+            onChange={(e) => setCommentName(e.target.value)}
+            placeholder="Your name (optional)"
+            className="focus-ring w-full border border-line bg-paper px-4 py-2.5 font-body text-sm text-navy placeholder:text-navy-soft/60"
+          />
+          <textarea
+            rows={3}
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            placeholder="Ask a question or leave a comment about this product"
+            className="focus-ring mt-2 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+          />
+          {commentError && (
+            <p className="mt-2 font-body text-sm text-red-700">{commentError}</p>
+          )}
+          <button
+            type="button"
+            onClick={handlePostComment}
+            disabled={postingComment}
+            className="focus-ring mt-3 bg-blue px-5 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+          >
+            {postingComment ? "Posting..." : "Post comment"}
+          </button>
+        </div>
+
+        <div className="mt-6 max-w-lg space-y-4">
+          {comments.length === 0 ? (
+            <p className="font-body text-sm text-navy-soft">
+              No comments yet — be the first to ask something.
+            </p>
+          ) : (
+            comments.map((c) => (
+              <div key={c.id} className="border border-line bg-paper p-4">
+                <p className="font-body text-sm font-medium text-navy">
+                  {c.author_name || "Anonymous buyer"}
+                </p>
+                <p className="mt-1 font-body text-sm text-navy-soft">{c.comment}</p>
+                <p className="mt-2 font-body text-xs text-navy-soft">
+                  {new Date(c.created_at).toLocaleDateString("en-NG", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+            ))
           )}
         </div>
       </div>

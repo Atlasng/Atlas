@@ -73,12 +73,20 @@ export default function ShopDashboardPage() {
           <span className="font-display text-2xl tracking-tightest text-navy">
             Atlas
           </span>
-          <Link
-            href="/dashboard"
-            className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-          >
-            ← Back to marketplace
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link
+              href="/dashboard/shop/settings"
+              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+            >
+              Shop settings
+            </Link>
+            <Link
+              href="/dashboard"
+              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+            >
+              ← Back to marketplace
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -133,6 +141,12 @@ export default function ShopDashboardPage() {
             className="focus-ring border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
           >
             View my products
+          </Link>
+          <Link
+            href="/dashboard/shop/settings"
+            className="focus-ring border border-line px-6 py-3 font-body text-sm font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+          >
+            Shop settings
           </Link>
         </div>
 

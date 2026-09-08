@@ -10,6 +10,7 @@ import type { User } from "@supabase/supabase-js";
 
 type Product = {
   id: string;
+  shop_id: string;
   name: string;
   category: string;
   price: number;
@@ -62,7 +63,7 @@ export default function DashboardPage() {
 
     supabase
       .from("products")
-      .select("id, name, category, price, price_type, images, sizes, colors, shop_name, shop_phone")
+      .select("id, shop_id, name, category, price, price_type, images, sizes, colors, shop_name, shop_phone")
       .then(({ data }) => {
         if (!active) return;
         // Older rows (or anything inserted outside the app) may still have
@@ -594,9 +595,13 @@ function DashboardBody({
                         {product.category}
                       </p>
                       {product.shop_name && (
-                        <p className="shrink-0 truncate font-body text-xs font-bold uppercase text-navy-soft">
+                        <Link
+                          href={`/shop/${product.shop_id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="focus-ring shrink-0 truncate font-body text-xs font-bold uppercase text-navy-soft hover:text-blue"
+                        >
                           {product.shop_name}
-                        </p>
+                        </Link>
                       )}
                     </div>
                     <Link href={`/product/${product.id}`} onClick={saveScrollState}>
