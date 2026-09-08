@@ -102,7 +102,7 @@ export default function ShopFrontPage() {
       ]);
 
     setProducts(productData ?? []);
-    setReviews((reviewData as Review[]) ?? []);
+    setReviews((reviewData as unknown as Review[]) ?? []);
     setFollowerCount(followCount ?? 0);
 
     const {
@@ -120,7 +120,7 @@ export default function ShopFrontPage() {
         .maybeSingle();
       setIsFollowing(Boolean(followRow));
 
-      const mine = (reviewData as Review[] | null)?.find(
+      const mine = (reviewData as unknown as Review[] | null)?.find(
         (r) => r.user_id === session.user.id
       );
       if (mine) {
