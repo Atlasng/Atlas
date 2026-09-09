@@ -137,6 +137,15 @@ export default function AccountPage() {
           </div>
         )}
 
+        <div className="mt-8 flex flex-wrap gap-4 border-t border-line pt-8">
+          <Link
+            href="/account/delivery"
+            className="focus-ring border border-line px-5 py-2.5 font-body text-sm font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+          >
+            Delivery address
+          </Link>
+        </div>
+
         {hasShop && shopId && (
           <div className="mt-8 flex flex-wrap gap-4 border-t border-line pt-8">
             <Link

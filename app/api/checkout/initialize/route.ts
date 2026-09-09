@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   const { data: cartItems, error: cartError } = await admin
     .from("cart_items")
     .select(
-      "quantity, size, products(id, name, price, category, shop_id, digital_file_path)"
+      "quantity, size, color, products(id, name, price, category, shop_id, digital_file_path)"
     )
     .eq("user_id", user.id);
 
@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
 
   type CartRow = {
     quantity: number;
-    size: string;
+    size: string | null;
+    color: string | null;
     products: {
       id: string;
       name: string;
@@ -57,10 +58,66 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Your cart is empty." }, { status: 400 });
   }
 
-  const totalNaira = validRows.reduce(
+  const hasPhysical = validRows.some(
+    (row) => row.products!.category !== "Digital Products"
+  );
+
+  // Physical items ship to a motor park, not a home address — this is
+  // the buyer's saved pickup point, snapshotted onto the order below.
+  let deliveryState: string | null = null;
+  let deliveryParkName: string | null = null;
+  let deliveryFee = 0;
+
+  if (hasPhysical) {
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("delivery_state, delivery_motor_park_id, motor_parks:delivery_motor_park_id(name)")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!profile?.delivery_state || !profile?.delivery_motor_park_id) {
+      return NextResponse.json(
+        { error: "Set a delivery address before checking out." },
+        { status: 400 }
+      );
+    }
+
+    deliveryState = profile.delivery_state;
+    deliveryParkName =
+      (profile.motor_parks as unknown as { name: string } | null)?.name ?? null;
+
+    // Each shop in the cart charges its own delivery fee to the buyer's
+    // state — a cart spanning 3 shops means 3 separate delivery fees,
+    // since each shop ships independently.
+    const physicalShopIds = Array.from(
+      new Set(
+        validRows
+          .filter((row) => row.products!.category !== "Digital Products")
+          .map((row) => row.products!.shop_id)
+      )
+    );
+
+    const { data: shops, error: shopsError } = await admin
+      .from("shops")
+      .select("id, delivery_prices")
+      .in("id", physicalShopIds);
+
+    if (shopsError) {
+      return NextResponse.json({ error: shopsError.message }, { status: 500 });
+    }
+
+    for (const shop of shops ?? []) {
+      const prices = shop.delivery_prices as Record<string, number> | null;
+      const fee = prices?.[deliveryState] ?? 0;
+      deliveryFee += fee;
+    }
+  }
+
+  const itemsTotal = validRows.reduce(
     (sum, row) => sum + row.products!.price * row.quantity,
     0
   );
+  const totalNaira = itemsTotal + deliveryFee;
   const amountKobo = Math.round(totalNaira * 100);
 
   // Create the order as 'pending' up front — this is the record checkout
@@ -68,7 +125,14 @@ export async function POST(request: NextRequest) {
   // so later product edits never change what was actually charged.
   const { data: order, error: orderError } = await admin
     .from("orders")
-    .insert({ buyer_id: user.id, total_amount: totalNaira, status: "pending" })
+    .insert({
+      buyer_id: user.id,
+      total_amount: totalNaira,
+      status: "pending",
+      delivery_state: deliveryState,
+      delivery_motor_park_name: deliveryParkName,
+      delivery_fee: deliveryFee,
+    })
     .select("id")
     .single();
 
@@ -86,9 +150,10 @@ export async function POST(request: NextRequest) {
     product_name: row.products!.name,
     price: row.products!.price,
     quantity: row.quantity,
+    size: row.size,
+    color: row.color,
     is_digital: row.products!.category === "Digital Products",
     digital_file_path: row.products!.digital_file_path,
-    size: row.size || null,
   }));
 
   const { error: itemsError } = await admin.from("order_items").insert(orderItems);

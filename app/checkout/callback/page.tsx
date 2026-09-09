@@ -11,7 +11,6 @@ function CheckoutCallbackContent() {
 
   const [status, setStatus] = useState<"checking" | "success" | "error">("checking");
   const [error, setError] = useState("");
-  const [orderId, setOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!reference) {
@@ -28,7 +27,6 @@ function CheckoutCallbackContent() {
           setError(json.error || "Payment could not be confirmed.");
           return;
         }
-        setOrderId(json.orderId);
         setStatus("success");
         setTimeout(() => router.replace(`/orders/${json.orderId}`), 1200);
       })
