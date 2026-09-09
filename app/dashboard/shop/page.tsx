@@ -10,6 +10,11 @@ type FollowedShop = {
   shops: { shop_name: string; logo_url: string | null } | null;
 };
 
+type Follower = {
+  user_id: string;
+  profiles: { full_name: string | null; avatar_url: string | null } | null;
+};
+
 type Shop = {
   id: string;
   shop_name: string;
@@ -34,6 +39,11 @@ export default function AccountPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [followerCount, setFollowerCount] = useState(0);
   const [following, setFollowing] = useState<FollowedShop[]>([]);
+
+  // Followers/following panel (opened by clicking the count labels)
+  const [panel, setPanel] = useState<"followers" | "following" | null>(null);
+  const [followers, setFollowers] = useState<Follower[] | null>(null);
+  const [followersLoading, setFollowersLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -91,6 +101,24 @@ export default function AccountPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function openPanel(which: "followers" | "following") {
+    setPanel(which);
+
+    if (which === "followers" && followers === null && shop) {
+      setFollowersLoading(true);
+      const { data } = await supabase
+        .from("shop_follows")
+        .select("user_id, profiles(full_name, avatar_url)")
+        .eq("shop_id", shop.id);
+      setFollowers((data as unknown as Follower[]) ?? []);
+      setFollowersLoading(false);
+    }
+  }
+
+  function closePanel() {
+    setPanel(null);
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
@@ -113,6 +141,12 @@ export default function AccountPage() {
 
   return (
     <main className="min-h-screen bg-paper">
+      {/*
+        Header + quick-action bar live inside one sticky element so the
+        "List a product / View my products / View my storefront" shortcuts
+        stay pinned while scrolling, without having to hand-calculate a
+        top offset for a second sticky block.
+      */}
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
           <Link
@@ -133,6 +167,37 @@ export default function AccountPage() {
               className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
             >
               ← Back to marketplace
+            </Link>
+          </div>
+        </div>
+
+        <div className="border-t border-line bg-ice/60">
+          <div className="mx-auto flex max-w-content flex-wrap items-center gap-2 px-6 py-2.5 md:px-10">
+            {/*
+              Plain <a>, not next/link, on purpose. This route is gated by
+              middleware based on live delivery-pricing data. next/link's
+              client-side router cache can replay a stale redirect from an
+              earlier visit even after the underlying data changes — a real
+              page load guarantees middleware re-runs against current data
+              every time.
+            */}
+            <a
+              href="/dashboard/shop/new"
+              className="focus-ring bg-blue px-3 py-1.5 font-body text-xs font-medium text-white transition-colors hover:bg-blue-dark"
+            >
+              + List a product
+            </a>
+            <Link
+              href="/dashboard/shop/products"
+              className="focus-ring border border-blue px-3 py-1.5 font-body text-xs font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+            >
+              View my products
+            </Link>
+            <Link
+              href={`/shop/${shop.id}`}
+              className="focus-ring border border-line px-3 py-1.5 font-body text-xs font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+            >
+              View my storefront
             </Link>
           </div>
         </div>
@@ -171,16 +236,24 @@ export default function AccountPage() {
               {fullName || "Your account"}
             </h1>
             <div className="mt-2 flex flex-wrap gap-4">
-              <span className="font-body text-sm text-navy-soft">
+              <button
+                type="button"
+                onClick={() => openPanel("followers")}
+                className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-blue"
+              >
                 <span className="font-medium text-navy">{followerCount}</span>{" "}
                 follower{followerCount === 1 ? "" : "s"}
-              </span>
-              <span className="font-body text-sm text-navy-soft">
+              </button>
+              <button
+                type="button"
+                onClick={() => openPanel("following")}
+                className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-blue"
+              >
                 <span className="font-medium text-navy">
                   {following.length}
                 </span>{" "}
                 following
-              </span>
+              </button>
             </div>
           </div>
           <Link
@@ -227,78 +300,107 @@ export default function AccountPage() {
             ))}
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-4">
-            {/*
-              Plain <a>, not next/link, on purpose. This route is gated by
-              middleware based on live delivery-pricing data. next/link's
-              client-side router cache can replay a stale redirect from an
-              earlier visit even after the underlying data changes — a real
-              page load guarantees middleware re-runs against current data
-              every time.
-            */}
-            <a
-              href="/dashboard/shop/new"
-              className="focus-ring bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-            >
-              + List a product
-            </a>
-            <Link
-              href="/dashboard/shop/products"
-              className="focus-ring border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-            >
-              View my products
-            </Link>
-            <Link
-              href={`/shop/${shop.id}`}
-              className="focus-ring border border-line px-6 py-3 font-body text-sm font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
-            >
-              View my storefront
-            </Link>
-          </div>
-
           <p className="mt-10 max-w-md font-body text-sm text-navy-soft">
             Sales and traffic analytics will appear here once your listings
             start getting orders.
           </p>
         </div>
-
-        {/* Following section */}
-        <div className="mt-10 border-t border-line pt-8">
-          <h2 className="font-display text-xl tracking-tightest text-navy">
-            Shops you follow
-          </h2>
-          {following.length === 0 ? (
-            <p className="mt-4 font-body text-sm text-navy-soft">
-              You're not following any shops yet. Follow a shop from its
-              storefront page to see them here.
-            </p>
-          ) : (
-            <div className="mt-4 space-y-2">
-              {following.map((f) => (
-                <Link
-                  key={f.shop_id}
-                  href={`/shop/${f.shop_id}`}
-                  className="focus-ring flex items-center gap-3 border border-line bg-paper p-3 transition-colors hover:border-blue"
-                >
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
-                    {f.shops?.logo_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={f.shops.logo_url}
-                        alt={f.shops.shop_name}
-                        className="h-full w-full object-cover"
-                      />
-                    )}
-                  </div>
-                  <span className="font-body text-sm font-medium text-navy">
-                    {f.shops?.shop_name ?? "Unknown shop"}
-                  </span>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Followers / following panel — opened via the count labels above */}
+      {panel && (
+        <div
+          className="fixed inset-0 z-30 flex items-start justify-center bg-navy/40 px-6 py-16 md:py-24"
+          onClick={closePanel}
+        >
+          <div
+            className="w-full max-w-md border border-line bg-paper"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line px-5 py-4">
+              <h3 className="font-display text-lg tracking-tightest text-navy">
+                {panel === "followers" ? "Followers" : "Following"}
+              </h3>
+              <button
+                type="button"
+                onClick={closePanel}
+                className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-navy"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto p-3">
+              {panel === "following" &&
+                (following.length === 0 ? (
+                  <p className="p-3 font-body text-sm text-navy-soft">
+                    You're not following any shops yet. Follow a shop from
+                    its storefront page to see them here.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {following.map((f) => (
+                      <Link
+                        key={f.shop_id}
+                        href={`/shop/${f.shop_id}`}
+                        onClick={closePanel}
+                        className="focus-ring flex items-center gap-3 border border-line bg-paper p-3 transition-colors hover:border-blue"
+                      >
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
+                          {f.shops?.logo_url && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={f.shops.logo_url}
+                              alt={f.shops.shop_name}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                        <span className="font-body text-sm font-medium text-navy">
+                          {f.shops?.shop_name ?? "Unknown shop"}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                ))}
+
+              {panel === "followers" &&
+                (followersLoading ? (
+                  <p className="p-3 font-body text-sm text-navy-soft">
+                    Loading...
+                  </p>
+                ) : !followers || followers.length === 0 ? (
+                  <p className="p-3 font-body text-sm text-navy-soft">
+                    No one is following your shop yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {followers.map((f) => (
+                      <div
+                        key={f.user_id}
+                        className="flex items-center gap-3 border border-line bg-paper p-3"
+                      >
+                        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
+                          {f.profiles?.avatar_url && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={f.profiles.avatar_url}
+                              alt={f.profiles.full_name ?? "Follower"}
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+                        </div>
+                        <span className="font-body text-sm font-medium text-navy">
+                          {f.profiles?.full_name ?? "Unknown user"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
