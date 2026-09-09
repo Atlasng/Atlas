@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { useCart } from "@/lib/cart-context";
@@ -347,7 +347,7 @@ function DashboardBody({
   }, [products, activeCategory, searchTerm]);
 
   return (
-    <main className="min-h-screen bg-paper">
+    <main className="min-h-screen bg-paper pb-20">
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-10">
@@ -376,70 +376,6 @@ function DashboardBody({
                 className="focus-ring w-full border border-line bg-ice py-2 pl-9 pr-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
               />
             </div>
-
-            <Link
-              href="/cart"
-              aria-label={`Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`}
-              className="focus-ring relative shrink-0 text-navy-soft transition-colors hover:text-navy"
-            >
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <path
-                  d="M2 5h2l1.2 8.4a1.5 1.5 0 0 0 1.5 1.3h6.6a1.5 1.5 0 0 0 1.5-1.3L16 6H5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
-                <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
-              </svg>
-              {cartCount > 0 && (
-                <span className="absolute -right-2 -top-2 flex h-4 min-w-[16px] items-center justify-center bg-blue px-1 font-body text-[10px] font-medium leading-none text-white">
-                  {cartCount > 99 ? "99+" : cartCount}
-                </span>
-              )}
-            </Link>
-
-            {user && (
-              <Link
-                href="/account"
-                aria-label="My account"
-                className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
-              >
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
-                  <path
-                    d="M3.5 15c0-3 2.5-5 5.5-5s5.5 2 5.5 5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </Link>
-            )}
-
-            {user && (
-              <Link
-                href="/orders"
-                aria-label="My orders"
-                className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
-              >
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                  <path
-                    d="M4 2h10v14l-2-1.2-1.5 1.2L9 14.8 7.5 16 6 14.8 4 16V2Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M6.5 6h5M6.5 9h5"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </Link>
-            )}
 
             {user ? (
               <button
@@ -689,7 +625,140 @@ function DashboardBody({
           </Link>
         </div>
       </div>
+
+      <BottomNav user={user} cartCount={cartCount} />
     </main>
+  );
+}
+
+function BottomNav({
+  user,
+  cartCount,
+}: {
+  user: User | null;
+  cartCount: number;
+}) {
+  const pathname = usePathname();
+
+  const items = [
+    {
+      href: "/dashboard",
+      label: "Home",
+      isActive: pathname === "/dashboard",
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+          <path
+            d="M2.5 8.5 9 3l6.5 5.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M4 7.5V15h10V7.5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+    },
+    {
+      href: "/cart",
+      label: "Cart",
+      isActive: pathname === "/cart",
+      badge: cartCount > 0 ? (cartCount > 99 ? "99+" : cartCount) : null,
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+          <path
+            d="M2 5h2l1.2 8.4a1.5 1.5 0 0 0 1.5 1.3h6.6a1.5 1.5 0 0 0 1.5-1.3L16 6H5"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
+          <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
+        </svg>
+      ),
+    },
+    ...(user
+      ? [
+          {
+            href: "/orders",
+            label: "Orders",
+            isActive: pathname === "/orders",
+            badge: null as string | number | null,
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+                <path
+                  d="M4 2h10v14l-2-1.2-1.5 1.2L9 14.8 7.5 16 6 14.8 4 16V2Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M6.5 6h5M6.5 9h5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            ),
+          },
+          {
+            href: "/account",
+            label: "Account",
+            isActive: pathname === "/account",
+            badge: null as string | number | null,
+            icon: (
+              <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
+                <path
+                  d="M3.5 15c0-3 2.5-5 5.5-5s5.5 2 5.5 5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            ),
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper pb-[env(safe-area-inset-bottom)]">
+      <div className="mx-auto flex max-w-content items-stretch justify-around">
+        {items.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-label={
+              item.label === "Cart"
+                ? `Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`
+                : item.label
+            }
+            className={`focus-ring relative flex flex-1 flex-col items-center gap-1 py-2.5 font-body text-[11px] transition-colors ${
+              item.isActive
+                ? "text-blue"
+                : "text-navy-soft hover:text-navy"
+            }`}
+          >
+            <span className="relative">
+              {item.icon}
+              {item.badge && (
+                <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center bg-blue px-1 font-body text-[10px] font-medium leading-none text-white">
+                  {item.badge}
+                </span>
+              )}
+            </span>
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }
 
