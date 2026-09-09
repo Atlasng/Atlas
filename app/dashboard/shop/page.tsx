@@ -5,7 +5,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type FollowedShop = {
+  shop_id: string;
+  shops: { shop_name: string; logo_url: string | null } | null;
+};
+
 type Shop = {
+  id: string;
   shop_name: string;
   plan: string;
   plan_expires_at: string;
@@ -18,42 +24,74 @@ const stats = [
   { label: "Shop views", value: "0" },
 ];
 
-export default function ShopDashboardPage() {
+export default function AccountPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [shop, setShop] = useState<Shop | null>(null);
+
   const [loading, setLoading] = useState(true);
+  const [fullName, setFullName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [shop, setShop] = useState<Shop | null>(null);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [following, setFollowing] = useState<FollowedShop[]>([]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    async function load() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) {
         router.replace("/login");
         return;
       }
 
-      const { data } = await supabase
-        .from("shops")
-        .select("shop_name, plan, plan_expires_at")
-        .eq("user_id", session.user.id)
-        .maybeSingle();
+      const [{ data: profile }, { data: shopData }, { data: followingData }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("full_name, avatar_url")
+            .eq("id", session.user.id)
+            .maybeSingle(),
+          supabase
+            .from("shops")
+            .select("id, shop_name, plan, plan_expires_at")
+            .eq("user_id", session.user.id)
+            .maybeSingle(),
+          supabase
+            .from("shop_follows")
+            .select("shop_id, shops(shop_name, logo_url)")
+            .eq("user_id", session.user.id),
+        ]);
 
-      if (!data) {
+      if (!shopData) {
         router.replace("/dashboard/open-shop");
         return;
       }
 
-      if (new Date(data.plan_expires_at) < new Date()) {
+      if (new Date(shopData.plan_expires_at) < new Date()) {
         router.replace("/dashboard/plans");
         return;
       }
 
-      setShop(data);
+      setFullName(profile?.full_name ?? null);
+      setAvatarUrl(profile?.avatar_url ?? null);
+      setFollowing((followingData as unknown as FollowedShop[]) ?? []);
+      setShop(shopData);
+
+      const { count } = await supabase
+        .from("shop_follows")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopData.id);
+      setFollowerCount(count ?? 0);
+
       setLoading(false);
-    });
+    }
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (loading || !shop) {
+  if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
         <p className="font-body text-sm text-navy-soft">Loading...</p>
@@ -61,8 +99,15 @@ export default function ShopDashboardPage() {
     );
   }
 
+  if (!shop) {
+    // Redirect to /dashboard/open-shop or /dashboard/plans is already in
+    // flight (see load()); render nothing in the meantime.
+    return null;
+  }
+
   const daysLeft = Math.ceil(
-    (new Date(shop.plan_expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    (new Date(shop.plan_expires_at).getTime() - Date.now()) /
+      (1000 * 60 * 60 * 24)
   );
   const expiringSoon = daysLeft <= 5;
 
@@ -70,9 +115,12 @@ export default function ShopDashboardPage() {
     <main className="min-h-screen bg-paper">
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
-          <span className="font-display text-2xl tracking-tightest text-navy">
+          <Link
+            href="/dashboard"
+            className="font-display text-2xl tracking-tightest text-navy"
+          >
             Atlas
-          </span>
+          </Link>
           <div className="flex items-center gap-5">
             <Link
               href="/dashboard/shop/settings"
@@ -106,62 +154,150 @@ export default function ShopDashboardPage() {
           </div>
         )}
 
-        <p className="font-body text-sm font-medium text-blue">
-          {shop.plan[0].toUpperCase() + shop.plan.slice(1)} plan · renews{" "}
-          {new Date(shop.plan_expires_at).toLocaleDateString("en-NG", {
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}
-        </p>
-        <h1 className="mt-1 font-display text-3xl tracking-tightest text-navy md:text-4xl">
-          {shop.shop_name}
-        </h1>
-
-        <div className="mt-10 grid grid-cols-2 gap-4 md:grid-cols-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className="border border-line bg-ice p-5">
-              <p className="font-body text-xs text-navy-soft">{stat.label}</p>
-              <p className="mt-1 font-display text-2xl text-navy">
-                {stat.value}
-              </p>
+        {/* Profile section */}
+        <div className="flex flex-wrap items-center gap-5">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
+            {avatarUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt={fullName ?? "Your profile"}
+                className="h-full w-full object-cover"
+              />
+            )}
+          </div>
+          <div className="flex-1">
+            <h1 className="font-display text-2xl tracking-tightest text-navy md:text-3xl">
+              {fullName || "Your account"}
+            </h1>
+            <div className="mt-2 flex flex-wrap gap-4">
+              <span className="font-body text-sm text-navy-soft">
+                <span className="font-medium text-navy">{followerCount}</span>{" "}
+                follower{followerCount === 1 ? "" : "s"}
+              </span>
+              <span className="font-body text-sm text-navy-soft">
+                <span className="font-medium text-navy">
+                  {following.length}
+                </span>{" "}
+                following
+              </span>
             </div>
-          ))}
-        </div>
-
-        <div className="mt-10 flex flex-wrap gap-4">
-          {/*
-            Plain <a>, not next/link, on purpose. This route is gated by
-            middleware based on live delivery-pricing data. next/link's
-            client-side router cache can replay a stale redirect from an
-            earlier visit even after the underlying data changes — a real
-            page load guarantees middleware re-runs against current data
-            every time.
-          */}
-          <a
-            href="/dashboard/shop/new"
-            className="focus-ring bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
-          >
-            + List a product
-          </a>
+          </div>
           <Link
-            href="/dashboard/shop/products"
-            className="focus-ring border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+            href="/account/settings"
+            className="focus-ring shrink-0 border border-blue px-5 py-2.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
           >
-            View my products
-          </Link>
-          <Link
-            href="/dashboard/shop/settings"
-            className="focus-ring border border-line px-6 py-3 font-body text-sm font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
-          >
-            Shop settings
+            Edit profile
           </Link>
         </div>
 
-        <p className="mt-16 max-w-md font-body text-sm text-navy-soft">
-          Sales and traffic analytics will appear here once your listings
-          start getting orders.
-        </p>
+        <div className="mt-8 flex flex-wrap gap-4 border-t border-line pt-8">
+          <Link
+            href="/account/delivery"
+            className="focus-ring border border-line px-5 py-2.5 font-body text-sm font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+          >
+            Delivery address
+          </Link>
+        </div>
+
+        {/* Shop dashboard section */}
+        <div className="mt-10 border-t border-line pt-8">
+          <p className="font-body text-sm font-medium text-blue">
+            {shop.plan[0].toUpperCase() + shop.plan.slice(1)} plan · renews{" "}
+            {new Date(shop.plan_expires_at).toLocaleDateString("en-NG", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+          </p>
+          <h2 className="mt-1 font-display text-2xl tracking-tightest text-navy md:text-3xl">
+            {shop.shop_name}
+          </h2>
+
+          <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+            {stats.map((stat) => (
+              <div key={stat.label} className="border border-line bg-ice p-5">
+                <p className="font-body text-xs text-navy-soft">
+                  {stat.label}
+                </p>
+                <p className="mt-1 font-display text-2xl text-navy">
+                  {stat.value}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-8 flex flex-wrap gap-4">
+            {/*
+              Plain <a>, not next/link, on purpose. This route is gated by
+              middleware based on live delivery-pricing data. next/link's
+              client-side router cache can replay a stale redirect from an
+              earlier visit even after the underlying data changes — a real
+              page load guarantees middleware re-runs against current data
+              every time.
+            */}
+            <a
+              href="/dashboard/shop/new"
+              className="focus-ring bg-blue px-6 py-3 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
+            >
+              + List a product
+            </a>
+            <Link
+              href="/dashboard/shop/products"
+              className="focus-ring border border-blue px-6 py-3 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+            >
+              View my products
+            </Link>
+            <Link
+              href={`/shop/${shop.id}`}
+              className="focus-ring border border-line px-6 py-3 font-body text-sm font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+            >
+              View my storefront
+            </Link>
+          </div>
+
+          <p className="mt-10 max-w-md font-body text-sm text-navy-soft">
+            Sales and traffic analytics will appear here once your listings
+            start getting orders.
+          </p>
+        </div>
+
+        {/* Following section */}
+        <div className="mt-10 border-t border-line pt-8">
+          <h2 className="font-display text-xl tracking-tightest text-navy">
+            Shops you follow
+          </h2>
+          {following.length === 0 ? (
+            <p className="mt-4 font-body text-sm text-navy-soft">
+              You're not following any shops yet. Follow a shop from its
+              storefront page to see them here.
+            </p>
+          ) : (
+            <div className="mt-4 space-y-2">
+              {following.map((f) => (
+                <Link
+                  key={f.shop_id}
+                  href={`/shop/${f.shop_id}`}
+                  className="focus-ring flex items-center gap-3 border border-line bg-paper p-3 transition-colors hover:border-blue"
+                >
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-line bg-ice">
+                    {f.shops?.logo_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={f.shops.logo_url}
+                        alt={f.shops.shop_name}
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <span className="font-body text-sm font-medium text-navy">
+                    {f.shops?.shop_name ?? "Unknown shop"}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

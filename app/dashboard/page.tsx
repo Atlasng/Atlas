@@ -708,9 +708,9 @@ function BottomNav({
             ),
           },
           {
-            href: "/account",
+            href: "/dashboard/shop",
             label: "Account",
-            isActive: pathname === "/account",
+            isActive: pathname === "/dashboard/shop",
             badge: null as string | number | null,
             icon: (
               <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
