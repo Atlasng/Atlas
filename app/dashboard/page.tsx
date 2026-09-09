@@ -349,7 +349,7 @@ function DashboardBody({
   return (
     <main className="min-h-screen bg-paper">
       {/* Header */}
-      <header className="border-b border-line">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-10">
           <span className="font-display text-2xl tracking-tightest text-navy">
             Atlas
@@ -576,9 +576,9 @@ function DashboardBody({
             )}
           </div>
 
-          {/* Category filter — single scrollable row, sticks to the top
-              of the viewport once you scroll past it */}
-          <div className="sticky top-0 z-10 -mx-6 mt-6 overflow-x-auto bg-paper px-6 py-3 md:-mx-10 md:px-10">
+          {/* Category filter — single scrollable row, sticks just below
+              the header once you scroll past it */}
+          <div className="sticky top-[73px] z-10 -mx-6 mt-6 overflow-x-auto bg-paper px-6 py-3 md:-mx-10 md:px-10">
             <div className="flex w-max gap-2.5">
               {categoryFilters.map((category) => {
                 const isActive = category === activeCategory;

@@ -82,7 +82,7 @@ export default function AccountPage() {
 
   return (
     <main className="min-h-screen bg-paper">
-      <header className="border-b border-line">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
           <Link href="/dashboard" className="font-display text-2xl tracking-tightest text-navy">
             Atlas
