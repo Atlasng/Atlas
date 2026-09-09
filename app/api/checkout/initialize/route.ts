@@ -86,10 +86,11 @@ export async function POST(request: NextRequest) {
     deliveryParkName =
       (profile.motor_parks as unknown as { name: string } | null)?.name ?? null;
 
-    // Narrow to a non-null const so TS knows it's safe to use as an index
-    // below — `deliveryState` itself is a mutable `let` from the outer
-    // scope, so its type stays `string | null` even after the check above.
-    const state = deliveryState;
+    // Non-null assertion: the guard clause above already returned early
+    // if profile.delivery_state was falsy, so deliveryState is guaranteed
+    // to be a string here. TS's control-flow narrowing doesn't carry this
+    // guarantee through the outer `let` variable, so we assert it.
+    const state = deliveryState!;
 
     // Each shop in the cart charges its own delivery fee to the buyer's
     // state — a cart spanning 3 shops means 3 separate delivery fees,
