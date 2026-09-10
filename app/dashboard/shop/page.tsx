@@ -106,11 +106,45 @@ export default function AccountPage() {
 
     if (which === "followers" && followers === null && shop) {
       setFollowersLoading(true);
-      const { data } = await supabase
+
+      // Fetched as two queries rather than an embedded
+      // shop_follows -> profiles select: an embedded join silently
+      // returns no rows if Supabase can't resolve the relationship
+      // (e.g. no FK constraint from shop_follows.user_id to
+      // profiles.id), which is why the panel was showing "no
+      // followers" even with a real follower row present.
+      const { data: followRows, error: followErr } = await supabase
         .from("shop_follows")
-        .select("user_id, profiles(full_name, avatar_url)")
+        .select("user_id")
         .eq("shop_id", shop.id);
-      setFollowers((data as unknown as Follower[]) ?? []);
+
+      if (followErr || !followRows || followRows.length === 0) {
+        setFollowers([]);
+        setFollowersLoading(false);
+        return;
+      }
+
+      const userIds = followRows.map((r) => r.user_id);
+      const { data: profileRows } = await supabase
+        .from("profiles")
+        .select("id, full_name, avatar_url")
+        .in("id", userIds);
+
+      const profileById = new Map(
+        (profileRows ?? []).map((p) => [p.id, p])
+      );
+
+      setFollowers(
+        followRows.map((r) => ({
+          user_id: r.user_id,
+          profiles: profileById.get(r.user_id)
+            ? {
+                full_name: profileById.get(r.user_id)!.full_name,
+                avatar_url: profileById.get(r.user_id)!.avatar_url,
+              }
+            : null,
+        }))
+      );
       setFollowersLoading(false);
     }
   }
@@ -142,37 +176,20 @@ export default function AccountPage() {
   return (
     <main className="min-h-screen bg-paper">
       {/*
-        Header + quick-action bar live inside one sticky element so the
-        "List a product / View my products / View my storefront" shortcuts
-        stay pinned while scrolling, without having to hand-calculate a
-        top offset for a second sticky block.
+        Everything lives in one sticky row — the shortcuts, logo, and nav
+        links — so it stays pinned while scrolling. On narrow viewports
+        the row scrolls horizontally instead of wrapping to a second line.
       */}
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
-        <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
+        <div className="mx-auto flex max-w-content items-center gap-4 overflow-x-auto whitespace-nowrap px-6 py-3 md:px-10">
           <Link
             href="/dashboard"
-            className="font-display text-2xl tracking-tightest text-navy"
+            className="shrink-0 font-display text-lg tracking-tightest text-navy"
           >
             Atlas
           </Link>
-          <div className="flex items-center gap-5">
-            <Link
-              href="/dashboard/shop/settings"
-              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-            >
-              Shop settings
-            </Link>
-            <Link
-              href="/dashboard"
-              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-            >
-              ← Back to marketplace
-            </Link>
-          </div>
-        </div>
 
-        <div className="border-t border-line bg-ice/60">
-          <div className="mx-auto flex max-w-content flex-wrap items-center gap-2 px-6 py-2.5 md:px-10">
+          <div className="flex shrink-0 items-center gap-2 border-l border-line pl-4">
             {/*
               Plain <a>, not next/link, on purpose. This route is gated by
               middleware based on live delivery-pricing data. next/link's
@@ -200,19 +217,34 @@ export default function AccountPage() {
               View my storefront
             </Link>
           </div>
+
+          <div className="ml-auto flex shrink-0 items-center gap-4 pl-4">
+            <Link
+              href="/dashboard/shop/settings"
+              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+            >
+              Shop settings
+            </Link>
+            <Link
+              href="/dashboard"
+              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+            >
+              ← Back to marketplace
+            </Link>
+          </div>
         </div>
       </header>
 
       <div className="mx-auto max-w-content px-6 py-12 md:px-10">
         {expiringSoon && (
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border border-red-300 bg-red-50 px-4 py-3">
-            <p className="font-body text-sm text-red-700">
-              Your plan expires in {daysLeft} day{daysLeft === 1 ? "" : "s"}.
-              Renew now to keep your shop active.
+          <div className="mb-6 flex items-center justify-between gap-3 whitespace-nowrap border border-red-300 bg-red-50 px-3 py-1.5">
+            <p className="truncate font-body text-xs text-red-700">
+              Plan expires in {daysLeft} day{daysLeft === 1 ? "" : "s"} —
+              renew to keep your shop active.
             </p>
             <Link
               href="/dashboard/plans"
-              className="focus-ring whitespace-nowrap bg-red-700 px-4 py-2 font-body text-sm font-medium text-white transition-colors hover:bg-red-800"
+              className="focus-ring shrink-0 bg-red-700 px-3 py-1 font-body text-xs font-medium text-white transition-colors hover:bg-red-800"
             >
               Renew now
             </Link>
