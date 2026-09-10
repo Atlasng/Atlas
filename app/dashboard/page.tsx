@@ -292,6 +292,8 @@ function DashboardBody({
   const searchParams = useSearchParams();
   const restoredRef = useRef(false);
 
+  const firstName = name.trim().split(/\s+/)[0]?.split("@")[0] ?? "";
+
   const categoryParam = searchParams.get("category");
   const initialCategory = categoryFilters.includes(categoryParam ?? "")
     ? (categoryParam as string)
@@ -351,9 +353,16 @@ function DashboardBody({
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-10">
-          <span className="font-display text-2xl tracking-tightest text-navy">
-            Atlas
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="font-display text-2xl tracking-tightest text-navy">
+              Atlas
+            </span>
+            {user && firstName && (
+              <span className="font-display text-xl font-black uppercase tracking-tight text-navy">
+                {firstName}
+              </span>
+            )}
+          </div>
 
           <div className="flex flex-1 items-center justify-end gap-4 md:gap-5">
             <div className="relative w-full max-w-[220px] sm:max-w-xs">
@@ -405,24 +414,7 @@ function DashboardBody({
       </header>
 
       <div className="mx-auto max-w-content px-6 pb-12 pt-6 md:px-10">
-        {user ? (
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-ice text-navy-soft">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                <circle cx="9" cy="6.2" r="3.2" stroke="currentColor" strokeWidth="1.5" />
-                <path
-                  d="M2.8 15.5c.9-3 3.4-4.8 6.2-4.8s5.3 1.8 6.2 4.8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            </div>
-            <span className="font-display text-2xl tracking-tightest text-navy md:text-3xl">
-              {name}
-            </span>
-          </div>
-        ) : (
+        {!user && (
           <div className="flex flex-wrap items-center gap-4">
             <p className="font-body text-sm text-navy-soft">
               Log in or create an account to open a shop and manage orders.
