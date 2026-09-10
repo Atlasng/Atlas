@@ -249,6 +249,17 @@ export default function DashboardPage() {
       });
     }
 
+    // Also record this as a wishlist entry so the *shop owner's*
+    // dashboard ("Total wishlisted" on /dashboard/shop) reflects it.
+    // Upsert (not insert) so wishlisting the same product again doesn't
+    // create duplicate rows or throw on the table's unique constraint.
+    await supabase
+      .from("wishlists")
+      .upsert(
+        { user_id: session.user.id, product_id: product.id },
+        { onConflict: "user_id,product_id" }
+      );
+
     await refreshCart();
     setAddingProductId(null);
     setAddedProductId(product.id);
