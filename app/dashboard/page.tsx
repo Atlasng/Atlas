@@ -48,6 +48,7 @@ export default function DashboardPage() {
 
   const [user, setUser] = useState<User | null>(null);
   const [hasShop, setHasShop] = useState(false);
+  const [shopId, setShopId] = useState<string | null>(null);
   const [shopExpiresAt, setShopExpiresAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
@@ -111,10 +112,12 @@ export default function DashboardPage() {
           .maybeSingle();
         if (active) {
           setHasShop(Boolean(shop));
+          setShopId(shop?.id ?? null);
           setShopExpiresAt(shop?.plan_expires_at ?? null);
         }
       } else {
         setHasShop(false);
+        setShopId(null);
         setShopExpiresAt(null);
       }
 
@@ -128,6 +131,7 @@ export default function DashboardPage() {
         setUser(session?.user ?? null);
         if (!session) {
           setHasShop(false);
+          setShopId(null);
           setShopExpiresAt(null);
         }
       }
@@ -219,6 +223,7 @@ export default function DashboardPage() {
         user={user}
         name={name}
         hasShop={hasShop}
+        shopId={shopId}
         isExpired={isExpired}
         expiringSoon={expiringSoon}
         daysLeft={daysLeft}
@@ -239,6 +244,7 @@ function DashboardBody({
   user,
   name,
   hasShop,
+  shopId,
   isExpired,
   expiringSoon,
   daysLeft,
@@ -253,6 +259,7 @@ function DashboardBody({
   user: User | null;
   name: string;
   hasShop: boolean;
+  shopId: string | null;
   isExpired: boolean;
   expiringSoon: boolean;
   daysLeft: number | null;
@@ -432,7 +439,7 @@ function DashboardBody({
                   )}
                 </div>
                 <Link
-                  href={isExpired ? "/dashboard/plans" : "/dashboard/shop"}
+                  href={isExpired ? "/dashboard/plans" : `/shop/${shopId}`}
                   className="focus-ring whitespace-nowrap bg-blue px-6 py-3 text-center font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark"
                 >
                   {isExpired ? "Renew now" : "Go to my shop"}
