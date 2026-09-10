@@ -353,16 +353,9 @@ function DashboardBody({
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-10">
-          <div className="flex items-center gap-4">
-            <span className="font-display text-2xl tracking-tightest text-navy">
-              Atlas
-            </span>
-            {user && firstName && (
-              <span className="font-display text-xl font-black uppercase tracking-tight text-navy">
-                {firstName}
-              </span>
-            )}
-          </div>
+          <span className="font-display text-2xl tracking-tightest text-navy">
+            Atlas
+          </span>
 
           <div className="flex flex-1 items-center justify-end gap-4 md:gap-5">
             <div className="relative w-full max-w-[220px] sm:max-w-xs">
@@ -387,12 +380,19 @@ function DashboardBody({
             </div>
 
             {user ? (
-              <button
-                onClick={onLogout}
-                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-              >
-                Log out
-              </button>
+              <div className="flex shrink-0 items-center gap-3">
+                {firstName && (
+                  <span className="font-mono text-xl font-black uppercase tracking-tight text-navy">
+                    @{firstName}
+                  </span>
+                )}
+                <button
+                  onClick={onLogout}
+                  className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+                >
+                  Log out
+                </button>
+              </div>
             ) : (
               <div className="flex shrink-0 items-center gap-3">
                 <Link
