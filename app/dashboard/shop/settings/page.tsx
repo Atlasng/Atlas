@@ -19,6 +19,9 @@ export default function ShopSettingsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
+  const [shopName, setShopName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
 
   const [error, setError] = useState("");
@@ -34,7 +37,7 @@ export default function ShopSettingsPage() {
 
       const { data: shop } = await supabase
         .from("shops")
-        .select("id, address, logo_url")
+        .select("id, shop_name, phone, email, address, logo_url")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
@@ -44,6 +47,9 @@ export default function ShopSettingsPage() {
       }
 
       setShopId(shop.id);
+      setShopName(shop.shop_name ?? "");
+      setPhone(shop.phone ?? "");
+      setEmail(shop.email ?? "");
       setAddress(shop.address ?? "");
       setLogoUrl(shop.logo_url);
       setChecking(false);
@@ -71,6 +77,11 @@ export default function ShopSettingsPage() {
     setError("");
 
     if (!shopId) return;
+
+    if (!shopName.trim()) {
+      setError("Shop name can't be empty.");
+      return;
+    }
 
     setSaving(true);
 
@@ -105,6 +116,9 @@ export default function ShopSettingsPage() {
       const { error: updateError } = await supabase
         .from("shops")
         .update({
+          shop_name: shopName.trim(),
+          phone: phone.trim() || null,
+          email: email.trim() || null,
           address: address.trim() || null,
           logo_url: newLogoUrl,
         })
@@ -152,7 +166,7 @@ export default function ShopSettingsPage() {
           Shop settings
         </h1>
         <p className="mt-2 font-body text-sm text-navy-soft">
-          Buyers see your address and profile picture on your storefront.
+          Buyers see this information on your storefront.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-8">
@@ -187,6 +201,51 @@ export default function ShopSettingsPage() {
                 className="hidden"
               />
             </div>
+          </div>
+
+          {/* Shop name */}
+          <div>
+            <label htmlFor="shopName" className="font-body text-sm font-medium text-navy">
+              Shop name
+            </label>
+            <input
+              id="shopName"
+              type="text"
+              value={shopName}
+              onChange={(e) => setShopName(e.target.value)}
+              placeholder="Your shop's name"
+              className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+            />
+          </div>
+
+          {/* WhatsApp number */}
+          <div>
+            <label htmlFor="whatsapp" className="font-body text-sm font-medium text-navy">
+              WhatsApp number
+            </label>
+            <input
+              id="whatsapp"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="e.g. +234 801 234 5678"
+              className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+            />
+          </div>
+
+          {/* Email address */}
+          <div>
+            <label htmlFor="email" className="font-body text-sm font-medium text-navy">
+              Email address
+            </label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+            />
           </div>
 
           {/* Address */}
