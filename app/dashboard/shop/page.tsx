@@ -207,12 +207,6 @@ export default function AccountPage() {
           </Link>
           <div className="flex items-center gap-5">
             <Link
-              href="/dashboard/shop/settings"
-              className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-            >
-              Shop settings
-            </Link>
-            <Link
               href="/dashboard"
               className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
             >
@@ -233,6 +227,12 @@ export default function AccountPage() {
         style={{ top: navHeaderHeight }}
       >
         <div className="mx-auto flex max-w-content items-center gap-2 overflow-x-auto whitespace-nowrap px-6 py-2.5 md:px-10">
+          <Link
+            href="/dashboard/shop/settings"
+            className="focus-ring shrink-0 border border-line px-3 py-1.5 font-body text-xs font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+          >
+            Shop settings
+          </Link>
           {/*
             Plain <a>, not next/link, on purpose. This route is gated by
             middleware based on live delivery-pricing data. next/link's
