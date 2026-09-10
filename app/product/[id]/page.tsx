@@ -20,7 +20,6 @@ type Product = {
   colors: string[] | null;
   digital_file_path: string | null;
   shop_name: string | null;
-  shop_phone: string | null;
 };
 
 type Comment = {
@@ -37,6 +36,11 @@ export default function ProductPage() {
   const id = params.id as string;
 
   const [product, setProduct] = useState<Product | null>(null);
+  // Fetched separately (and live) from shops.phone rather than trusting
+  // a shop_phone value denormalized onto the product row — sellers edit
+  // their WhatsApp number from Shop settings after products already
+  // exist, and that edit should be reflected immediately here.
+  const [shopPhone, setShopPhone] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -70,7 +74,7 @@ export default function ProductPage() {
   function handleChat() {
     if (!product) return;
     if (!checkVariantsSelected()) return;
-    if (!product.shop_phone) {
+    if (!shopPhone) {
       setActionError("This seller hasn't added a WhatsApp number yet.");
       return;
     }
@@ -81,13 +85,13 @@ export default function ProductPage() {
       variantBits ? ` (${variantBits})` : ""
     } listed at ${priceNote} ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
 
-    window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
+    window.open(buildWhatsAppLink(shopPhone, message), "_blank");
   }
 
   function handleDropship() {
     if (!product) return;
     if (!checkVariantsSelected()) return;
-    if (!product.shop_phone) {
+    if (!shopPhone) {
       setActionError("This seller hasn't added a WhatsApp number yet.");
       return;
     }
@@ -97,7 +101,7 @@ export default function ProductPage() {
       variantBits ? ` (${variantBits})` : ""
     } at your dropshipping price of ₦${product.dropship_price.toLocaleString()} on Atlas. Can we talk?`;
 
-    window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
+    window.open(buildWhatsAppLink(shopPhone, message), "_blank");
   }
 
   useEffect(() => {
@@ -105,7 +109,7 @@ export default function ProductPage() {
       const { data } = await supabase
         .from("products")
         .select(
-          "id, shop_id, name, description, price, dropship_price, price_type, category, images, sizes, colors, digital_file_path, shop_name, shop_phone"
+          "id, shop_id, name, description, price, dropship_price, price_type, category, images, sizes, colors, digital_file_path, shop_name"
         )
         .eq("id", id)
         .maybeSingle();
@@ -113,6 +117,17 @@ export default function ProductPage() {
       const fetchedProduct = data as Product | null;
 
       if (fetchedProduct) {
+        // Fetched as its own query (not embedded in the products select)
+        // so this always reflects whatever the seller has saved most
+        // recently in Shop settings, rather than a value copied onto the
+        // product row at listing time.
+        const { data: sellerShop } = await supabase
+          .from("shops")
+          .select("phone")
+          .eq("id", fetchedProduct.shop_id)
+          .maybeSingle();
+        setShopPhone(sellerShop?.phone ?? null);
+
         const {
           data: { session },
         } = await supabase.auth.getSession();
