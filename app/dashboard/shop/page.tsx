@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -44,6 +44,24 @@ export default function AccountPage() {
   const [panel, setPanel] = useState<"followers" | "following" | null>(null);
   const [followers, setFollowers] = useState<Follower[] | null>(null);
   const [followersLoading, setFollowersLoading] = useState(false);
+
+  // The action bar is a second, separate sticky header that needs to sit
+  // directly below the nav header. Its height changes with font size /
+  // wrapping across breakpoints, so we measure the nav header instead of
+  // hard-coding a pixel offset.
+  const navHeaderRef = useRef<HTMLElement>(null);
+  const [navHeaderHeight, setNavHeaderHeight] = useState(0);
+
+  useEffect(() => {
+    function measure() {
+      if (navHeaderRef.current) {
+        setNavHeaderHeight(navHeaderRef.current.offsetHeight);
+      }
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -175,50 +193,19 @@ export default function AccountPage() {
 
   return (
     <main className="min-h-screen bg-paper">
-      {/*
-        Everything lives in one sticky row — the shortcuts, logo, and nav
-        links — so it stays pinned while scrolling. On narrow viewports
-        the row scrolls horizontally instead of wrapping to a second line.
-      */}
-      <header className="sticky top-0 z-20 border-b border-line bg-paper">
-        <div className="mx-auto flex max-w-content items-center gap-4 overflow-x-auto whitespace-nowrap px-6 py-3 md:px-10">
+      {/* Nav header — logo + settings/back links */}
+      <header
+        ref={navHeaderRef}
+        className="sticky top-0 z-20 border-b border-line bg-paper"
+      >
+        <div className="mx-auto flex max-w-content items-center justify-between px-6 py-5 md:px-10">
           <Link
             href="/dashboard"
-            className="shrink-0 font-display text-lg tracking-tightest text-navy"
+            className="font-display text-2xl tracking-tightest text-navy"
           >
             Atlas
           </Link>
-
-          <div className="flex shrink-0 items-center gap-2 border-l border-line pl-4">
-            {/*
-              Plain <a>, not next/link, on purpose. This route is gated by
-              middleware based on live delivery-pricing data. next/link's
-              client-side router cache can replay a stale redirect from an
-              earlier visit even after the underlying data changes — a real
-              page load guarantees middleware re-runs against current data
-              every time.
-            */}
-            <a
-              href="/dashboard/shop/new"
-              className="focus-ring bg-blue px-3 py-1.5 font-body text-xs font-medium text-white transition-colors hover:bg-blue-dark"
-            >
-              + List a product
-            </a>
-            <Link
-              href="/dashboard/shop/products"
-              className="focus-ring border border-blue px-3 py-1.5 font-body text-xs font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-            >
-              View my products
-            </Link>
-            <Link
-              href={`/shop/${shop.id}`}
-              className="focus-ring border border-line px-3 py-1.5 font-body text-xs font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
-            >
-              View my storefront
-            </Link>
-          </div>
-
-          <div className="ml-auto flex shrink-0 items-center gap-4 pl-4">
+          <div className="flex items-center gap-5">
             <Link
               href="/dashboard/shop/settings"
               className="focus-ring font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
@@ -232,6 +219,46 @@ export default function AccountPage() {
               ← Back to marketplace
             </Link>
           </div>
+        </div>
+      </header>
+
+      {/*
+        Action header — a separate sticky element pinned directly below
+        the nav header. top is set to the nav header's measured height
+        (via navHeaderRef) rather than a hard-coded value, since that
+        height shifts across breakpoints.
+      */}
+      <header
+        className="sticky z-10 border-b border-line bg-ice/60"
+        style={{ top: navHeaderHeight }}
+      >
+        <div className="mx-auto flex max-w-content items-center gap-2 overflow-x-auto whitespace-nowrap px-6 py-2.5 md:px-10">
+          {/*
+            Plain <a>, not next/link, on purpose. This route is gated by
+            middleware based on live delivery-pricing data. next/link's
+            client-side router cache can replay a stale redirect from an
+            earlier visit even after the underlying data changes — a real
+            page load guarantees middleware re-runs against current data
+            every time.
+          */}
+          <a
+            href="/dashboard/shop/new"
+            className="focus-ring shrink-0 bg-blue px-3 py-1.5 font-body text-xs font-medium text-white transition-colors hover:bg-blue-dark"
+          >
+            + List a product
+          </a>
+          <Link
+            href="/dashboard/shop/products"
+            className="focus-ring shrink-0 border border-blue px-3 py-1.5 font-body text-xs font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+          >
+            View my products
+          </Link>
+          <Link
+            href={`/shop/${shop.id}`}
+            className="focus-ring shrink-0 border border-line px-3 py-1.5 font-body text-xs font-medium text-navy-soft transition-colors hover:border-blue hover:text-blue"
+          >
+            View my storefront
+          </Link>
         </div>
       </header>
 
