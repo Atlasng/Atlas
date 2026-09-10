@@ -35,6 +35,17 @@ const categoryFilters = [
 
 const SCROLL_STATE_KEY = "atlas-marketplace-state";
 
+type RatingInfo = { avg: number; count: number };
+
+function Stars({ value, size = "text-sm" }: { value: number; size?: string }) {
+  return (
+    <span className={`text-yellow-500 ${size}`} aria-label={`${value} out of 5 stars`}>
+      {"★".repeat(Math.round(value))}
+      <span className="text-line">{"★".repeat(5 - Math.round(value))}</span>
+    </span>
+  );
+}
+
 // All data-fetching lives here, in a component that does NOT call
 // useSearchParams(). That hook forces this component's Suspense boundary
 // to re-suspend/resume around search-param changes on Next 14, which can
@@ -53,6 +64,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
+  const [productRatings, setProductRatings] = useState<Record<string, RatingInfo>>({});
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const [addedProductId, setAddedProductId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -60,26 +72,59 @@ export default function DashboardPage() {
   useEffect(() => {
     let active = true;
 
-    supabase
-      .from("products")
-      .select("id, shop_id, name, category, price, price_type, images, sizes, colors, shop_name")
-      .then(({ data }) => {
-        if (!active) return;
-        // Older rows (or anything inserted outside the app) may still have
-        // null here even though the column is meant to always be an array —
-        // coalesce so `.length` never throws while rendering the grid.
-        const list = ((data as unknown as Product[]) ?? []).map((p) => ({
-          ...p,
-          sizes: p.sizes ?? [],
-          colors: p.colors ?? [],
-        }));
-        for (let i = list.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [list[i], list[j]] = [list[j], list[i]];
-        }
-        setProducts(list);
-        setProductsLoading(false);
-      });
+    async function loadProducts() {
+      const { data } = await supabase
+        .from("products")
+        .select("id, shop_id, name, category, price, price_type, images, sizes, colors, shop_name");
+      if (!active) return;
+
+      // Older rows (or anything inserted outside the app) may still have
+      // null here even though the column is meant to always be an array —
+      // coalesce so `.length` never throws while rendering the grid.
+      const list = ((data as unknown as Product[]) ?? []).map((p) => ({
+        ...p,
+        sizes: p.sizes ?? [],
+        colors: p.colors ?? [],
+      }));
+      for (let i = list.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [list[i], list[j]] = [list[j], list[i]];
+      }
+      setProducts(list);
+      setProductsLoading(false);
+
+      // Each product's own rating, averaged only from that product's own
+      // comments — fetched in one query for the whole grid rather than
+      // one query per card. This is intentionally separate from the
+      // combined rating shown across a shop's products on /shop/[id].
+      const productIds = list.map((p) => p.id);
+      if (productIds.length === 0) return;
+
+      const { data: ratingRows } = await supabase
+        .from("product_comments")
+        .select("product_id, rating")
+        .in("product_id", productIds);
+      if (!active) return;
+
+      const totals: Record<string, { sum: number; count: number }> = {};
+      for (const row of (ratingRows ?? []) as { product_id: string; rating: number }[]) {
+        const bucket = totals[row.product_id] ?? { sum: 0, count: 0 };
+        bucket.sum += row.rating;
+        bucket.count += 1;
+        totals[row.product_id] = bucket;
+      }
+
+      const ratings: Record<string, RatingInfo> = {};
+      for (const productId in totals) {
+        ratings[productId] = {
+          avg: totals[productId].sum / totals[productId].count,
+          count: totals[productId].count,
+        };
+      }
+      setProductRatings(ratings);
+    }
+
+    loadProducts();
 
     return () => {
       active = false;
@@ -229,6 +274,7 @@ export default function DashboardPage() {
         daysLeft={daysLeft}
         products={products}
         productsLoading={productsLoading}
+        productRatings={productRatings}
         addingProductId={addingProductId}
         addedProductId={addedProductId}
         cartCount={cartCount}
@@ -250,6 +296,7 @@ function DashboardBody({
   daysLeft,
   products,
   productsLoading,
+  productRatings,
   addingProductId,
   addedProductId,
   cartCount,
@@ -265,6 +312,7 @@ function DashboardBody({
   daysLeft: number | null;
   products: Product[];
   productsLoading: boolean;
+  productRatings: Record<string, RatingInfo>;
   addingProductId: string | null;
   addedProductId: string | null;
   cartCount: number;
@@ -551,6 +599,15 @@ function DashboardBody({
                         {product.name}
                       </h3>
                     </Link>
+                    {productRatings[product.id] ? (
+                      <span className="mt-1 flex items-center gap-1 font-body text-xs text-navy-soft">
+                        <Stars value={productRatings[product.id].avg} size="text-xs" />
+                        {productRatings[product.id].avg.toFixed(1)} (
+                        {productRatings[product.id].count})
+                      </span>
+                    ) : (
+                      <p className="mt-1 font-body text-xs text-navy-soft">No reviews yet</p>
+                    )}
                     <p className="mt-2 font-body text-sm font-medium text-navy">
                       ₦{product.price.toLocaleString()}
                     </p>

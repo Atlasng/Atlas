@@ -25,9 +25,19 @@ type Product = {
 type Comment = {
   id: string;
   comment: string;
+  rating: number;
   created_at: string;
   profiles: { full_name: string | null; avatar_url: string | null } | null;
 };
+
+function Stars({ value, size = "text-sm" }: { value: number; size?: string }) {
+  return (
+    <span className={`text-yellow-500 ${size}`} aria-label={`${value} out of 5 stars`}>
+      {"★".repeat(Math.round(value))}
+      <span className="text-line">{"★".repeat(5 - Math.round(value))}</span>
+    </span>
+  );
+}
 
 export default function ProductPage() {
   const params = useParams();
@@ -51,6 +61,7 @@ export default function ProductPage() {
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState("");
+  const [myRating, setMyRating] = useState(0);
   const [commentError, setCommentError] = useState("");
   const [postingComment, setPostingComment] = useState(false);
 
@@ -154,7 +165,7 @@ export default function ProductPage() {
 
       const { data: commentData } = await supabase
         .from("product_comments")
-        .select("id, comment, created_at, profiles(full_name, avatar_url)")
+        .select("id, comment, rating, created_at, profiles(full_name, avatar_url)")
         .eq("product_id", id)
         .order("created_at", { ascending: false });
       setComments((commentData as unknown as Comment[]) ?? []);
@@ -166,6 +177,10 @@ export default function ProductPage() {
   async function handlePostComment() {
     setCommentError("");
 
+    if (myRating < 1) {
+      setCommentError("Select a rating first.");
+      return;
+    }
     if (!commentText.trim()) {
       setCommentError("Write something first.");
       return;
@@ -185,6 +200,7 @@ export default function ProductPage() {
     const { error } = await supabase.from("product_comments").insert({
       product_id: id,
       user_id: session.user.id,
+      rating: myRating,
       comment: commentText.trim(),
     });
 
@@ -196,9 +212,10 @@ export default function ProductPage() {
     }
 
     setCommentText("");
+    setMyRating(0);
     const { data: commentData } = await supabase
       .from("product_comments")
-      .select("id, comment, created_at, profiles(full_name, avatar_url)")
+      .select("id, comment, rating, created_at, profiles(full_name, avatar_url)")
       .eq("product_id", id)
       .order("created_at", { ascending: false });
     setComments((commentData as unknown as Comment[]) ?? []);
@@ -237,6 +254,14 @@ export default function ProductPage() {
       </main>
     );
   }
+
+  // This product's own rating, computed only from its own comments — kept
+  // separate from the combined rating shown across all products on the
+  // shop page.
+  const productAvgRating =
+    comments.length > 0
+      ? comments.reduce((sum, c) => sum + c.rating, 0) / comments.length
+      : 0;
 
   return (
     <main className="min-h-screen bg-paper">
@@ -314,6 +339,14 @@ export default function ProductPage() {
               Sold by{" "}
               <span className="font-bold uppercase underline">{product.shop_name}</span>
             </Link>
+          )}
+          {comments.length > 0 ? (
+            <span className="mt-2 flex items-center gap-1.5 font-body text-sm text-navy">
+              <Stars value={productAvgRating} />
+              {productAvgRating.toFixed(1)} ({comments.length} review{comments.length === 1 ? "" : "s"})
+            </span>
+          ) : (
+            <p className="mt-2 font-body text-sm text-navy-soft">No reviews yet</p>
           )}
           <p className="mt-6 font-display text-2xl text-navy">
             {isNegotiable && (
@@ -434,13 +467,30 @@ export default function ProductPage() {
             placeholder="Ask a question or leave a comment about this product"
             className="focus-ring w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
           />
+          <p className="mt-3 font-body text-sm font-medium text-navy">Your rating</p>
+          <div className="mt-1.5 flex gap-1">
+            {[1, 2, 3, 4, 5].map((star) => (
+              <button
+                key={star}
+                type="button"
+                onClick={() => {
+                  setMyRating(star);
+                  setCommentError("");
+                }}
+                aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                className="focus-ring text-2xl leading-none text-yellow-500"
+              >
+                {star <= myRating ? "★" : <span className="text-line">★</span>}
+              </button>
+            ))}
+          </div>
           {commentError && (
             <p className="mt-2 font-body text-sm text-red-700">{commentError}</p>
           )}
           <button
             type="button"
             onClick={handlePostComment}
-            disabled={postingComment}
+            disabled={postingComment || myRating < 1}
             className="focus-ring mt-3 bg-blue px-5 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
           >
             {postingComment ? "Posting..." : "Post comment"}
@@ -466,9 +516,12 @@ export default function ProductPage() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <p className="font-body text-sm font-medium text-navy">
-                    {c.profiles?.full_name || "Anonymous buyer"}
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="font-body text-sm font-medium text-navy">
+                      {c.profiles?.full_name || "Anonymous buyer"}
+                    </p>
+                    <Stars value={c.rating} />
+                  </div>
                   <p className="mt-1 font-body text-sm text-navy-soft">{c.comment}</p>
                   <p className="mt-2 font-body text-xs text-navy-soft">
                     {new Date(c.created_at).toLocaleDateString("en-NG", {
