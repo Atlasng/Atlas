@@ -12,6 +12,7 @@ type Product = {
   name: string;
   description: string | null;
   price: number;
+  dropship_price: number;
   price_type: "fixed" | "negotiable";
   category: string;
   images: string[];
@@ -42,10 +43,7 @@ export default function ProductPage() {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [addingToCart, setAddingToCart] = useState(false);
-  const [addedToCart, setAddedToCart] = useState(false);
-  const [cartError, setCartError] = useState("");
-  const [dropshipMessage, setDropshipMessage] = useState("");
+  const [actionError, setActionError] = useState("");
 
   const [comments, setComments] = useState<Comment[]>([]);
   const [commentText, setCommentText] = useState("");
@@ -56,102 +54,50 @@ export default function ProductPage() {
   const hasColors = Boolean(product?.colors && product.colors.length > 0);
   const isNegotiable = product?.price_type === "negotiable";
 
-  function handleDropshipClick() {
-    // TODO: hook up real dropship behavior once it's decided (WhatsApp
-    // handoff, an info page, an application form, etc). For now this just
-    // confirms the button is live.
-    setDropshipMessage("Dropship — coming soon.");
-    setTimeout(() => setDropshipMessage(""), 2500);
-  }
-
-  function handleNegotiate() {
-    if (!product) return;
-    setCartError("");
-
+  function checkVariantsSelected(): boolean {
+    setActionError("");
     if (hasSizes && !selectedSize) {
-      setCartError("Select a size first.");
-      return;
+      setActionError("Select a size first.");
+      return false;
     }
     if (hasColors && !selectedColor) {
-      setCartError("Select a color first.");
-      return;
+      setActionError("Select a color first.");
+      return false;
     }
+    return true;
+  }
+
+  function handleChat() {
+    if (!product) return;
+    if (!checkVariantsSelected()) return;
     if (!product.shop_phone) {
-      setCartError("This seller hasn't added a WhatsApp number yet.");
+      setActionError("This seller hasn't added a WhatsApp number yet.");
       return;
     }
 
     const variantBits = [selectedSize, selectedColor].filter(Boolean).join(", ");
+    const priceNote = isNegotiable ? "asking price" : "price";
     const message = `Hi! I'm interested in "${product.name}"${
       variantBits ? ` (${variantBits})` : ""
-    } listed for ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
+    } listed at ${priceNote} ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
 
     window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
   }
 
-  async function handleAddToCart() {
-    setCartError("");
-
-    if (hasSizes && !selectedSize) {
-      setCartError("Select a size first.");
-      return;
-    }
-    if (hasColors && !selectedColor) {
-      setCartError("Select a color first.");
+  function handleDropship() {
+    if (!product) return;
+    if (!checkVariantsSelected()) return;
+    if (!product.shop_phone) {
+      setActionError("This seller hasn't added a WhatsApp number yet.");
       return;
     }
 
-    setAddingToCart(true);
+    const variantBits = [selectedSize, selectedColor].filter(Boolean).join(", ");
+    const message = `Hi! I'd like to dropship "${product.name}"${
+      variantBits ? ` (${variantBits})` : ""
+    } at your dropshipping price of ₦${product.dropship_price.toLocaleString()} on Atlas. Can we talk?`;
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
-      return;
-    }
-
-    // A given product + size + color combo is one cart line. Different
-    // variants of the same product are separate lines.
-    let existingQuery = supabase
-      .from("cart_items")
-      .select("id, quantity")
-      .eq("user_id", session.user.id)
-      .eq("product_id", id);
-
-    existingQuery = selectedSize
-      ? existingQuery.eq("size", selectedSize)
-      : existingQuery.is("size", null);
-    existingQuery = selectedColor
-      ? existingQuery.eq("color", selectedColor)
-      : existingQuery.is("color", null);
-
-    const { data: existing } = await existingQuery.maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from("cart_items")
-        .update({ quantity: existing.quantity + 1 })
-        .eq("id", existing.id);
-    } else {
-      const { error } = await supabase.from("cart_items").insert({
-        user_id: session.user.id,
-        product_id: id,
-        quantity: 1,
-        size: selectedSize,
-        color: selectedColor,
-      });
-      if (error) {
-        setCartError(error.message);
-        setAddingToCart(false);
-        return;
-      }
-    }
-
-    setAddingToCart(false);
-    setAddedToCart(true);
-    setTimeout(() => setAddedToCart(false), 2000);
+    window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
   }
 
   useEffect(() => {
@@ -159,7 +105,7 @@ export default function ProductPage() {
       const { data } = await supabase
         .from("products")
         .select(
-          "id, shop_id, name, description, price, price_type, category, images, sizes, colors, digital_file_path, shop_name, shop_phone"
+          "id, shop_id, name, description, price, dropship_price, price_type, category, images, sizes, colors, digital_file_path, shop_name, shop_phone"
         )
         .eq("id", id)
         .maybeSingle();
@@ -362,6 +308,9 @@ export default function ProductPage() {
             )}
             ₦{product.price.toLocaleString()}
           </p>
+          <p className="mt-1 font-body text-sm text-navy-soft">
+            Dropshipping price: ₦{product.dropship_price.toLocaleString()}
+          </p>
 
           {hasSizes && (
             <div className="mt-5">
@@ -375,7 +324,7 @@ export default function ProductPage() {
                       type="button"
                       onClick={() => {
                         setSelectedSize(size);
-                        setCartError("");
+                        setActionError("");
                       }}
                       aria-pressed={active}
                       className={`focus-ring min-w-[3rem] border px-4 py-2 font-body text-sm font-medium transition-colors ${
@@ -404,7 +353,7 @@ export default function ProductPage() {
                       type="button"
                       onClick={() => {
                         setSelectedColor(color);
-                        setCartError("");
+                        setActionError("");
                       }}
                       aria-pressed={active}
                       className={`focus-ring border px-4 py-2 font-body text-sm font-medium transition-colors ${
@@ -423,7 +372,8 @@ export default function ProductPage() {
 
           {product.digital_file_path && (
             <p className="mt-3 font-body text-sm text-blue">
-              📥 Includes a downloadable file, unlocked after purchase.
+              📥 This listing includes a digital file — coordinate delivery
+              with the seller over WhatsApp.
             </p>
           )}
 
@@ -433,44 +383,24 @@ export default function ProductPage() {
             </p>
           )}
 
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            {isNegotiable ? (
-              <button
-                onClick={handleNegotiate}
-                className="focus-ring flex items-center gap-2 bg-[#25D366] px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-[#1DA851]"
-              >
-                Negotiate on WhatsApp
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={handleAddToCart}
-                  disabled={addingToCart}
-                  className="focus-ring bg-blue px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-                >
-                  {addingToCart ? "Adding..." : addedToCart ? "✓ Added to cart" : "Add to cart"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDropshipClick}
-                  className="focus-ring border border-blue px-5 py-3.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-                >
-                  Dropship
-                </button>
-              </>
-            )}
-            <Link
-              href="/cart"
-              className="focus-ring font-body text-sm font-medium text-blue hover:text-blue-dark"
+          <div className="mt-8 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={handleChat}
+              className="focus-ring bg-[#25D366] px-7 py-3.5 font-body text-sm font-medium text-white transition-colors hover:bg-[#1DA851]"
             >
-              View cart
-            </Link>
+              Chat on WhatsApp
+            </button>
+            <button
+              type="button"
+              onClick={handleDropship}
+              className="focus-ring border border-blue px-5 py-3.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+            >
+              Dropship
+            </button>
           </div>
-          {cartError && (
-            <p className="mt-3 font-body text-sm text-red-700">{cartError}</p>
-          )}
-          {dropshipMessage && (
-            <p className="mt-3 font-body text-sm text-navy-soft">{dropshipMessage}</p>
+          {actionError && (
+            <p className="mt-3 font-body text-sm text-red-700">{actionError}</p>
           )}
         </div>
       </div>

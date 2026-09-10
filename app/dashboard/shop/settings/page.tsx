@@ -1,23 +1,16 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  NIGERIAN_STATES,
-  hasCompleteDeliveryPricing,
-  type DeliveryPrices,
-} from "@/lib/nigerian-states";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5MB
 
-function ShopSettingsContent() {
+export default function ShopSettingsPage() {
   const router = useRouter();
   const supabase = createClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const searchParams = useSearchParams();
-  const redirectedForDelivery = searchParams.get("reason") === "delivery-required";
 
   const [checking, setChecking] = useState(true);
   const [shopId, setShopId] = useState<string | null>(null);
@@ -27,8 +20,6 @@ function ShopSettingsContent() {
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const [address, setAddress] = useState("");
-  const [prices, setPrices] = useState<DeliveryPrices>({});
-  const [bulkPrice, setBulkPrice] = useState("");
 
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -43,7 +34,7 @@ function ShopSettingsContent() {
 
       const { data: shop } = await supabase
         .from("shops")
-        .select("id, address, logo_url, delivery_prices")
+        .select("id, address, logo_url")
         .eq("user_id", session.user.id)
         .maybeSingle();
 
@@ -55,7 +46,6 @@ function ShopSettingsContent() {
       setShopId(shop.id);
       setAddress(shop.address ?? "");
       setLogoUrl(shop.logo_url);
-      setPrices((shop.delivery_prices as DeliveryPrices) ?? {});
       setChecking(false);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -76,50 +66,11 @@ function ShopSettingsContent() {
     setLogoPreview(URL.createObjectURL(file));
   }
 
-  function updatePrice(state: string, value: string) {
-    setPrices((prev) => {
-      const next = { ...prev };
-      if (value.trim() === "") {
-        delete next[state];
-      } else {
-        const num = Number(value);
-        if (!Number.isNaN(num)) next[state] = num;
-      }
-      return next;
-    });
-  }
-
-  function applyBulkPrice() {
-    const num = Number(bulkPrice);
-    if (!bulkPrice || Number.isNaN(num) || num < 0) {
-      setError("Enter a valid price to apply to every state.");
-      return;
-    }
-    setError("");
-    const next: DeliveryPrices = {};
-    for (const state of NIGERIAN_STATES) next[state] = num;
-    setPrices(next);
-  }
-
-  const deliveryComplete = hasCompleteDeliveryPricing(prices);
-  const missingCount = NIGERIAN_STATES.filter(
-    (s) => typeof prices[s] !== "number"
-  ).length;
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
 
     if (!shopId) return;
-
-    if (!deliveryComplete) {
-      setError(
-        `Set a delivery price for every state before saving — ${missingCount} state${
-          missingCount === 1 ? "" : "s"
-        } still missing.`
-      );
-      return;
-    }
 
     setSaving(true);
 
@@ -156,7 +107,6 @@ function ShopSettingsContent() {
         .update({
           address: address.trim() || null,
           logo_url: newLogoUrl,
-          delivery_prices: prices,
         })
         .eq("id", shopId);
 
@@ -202,29 +152,8 @@ function ShopSettingsContent() {
           Shop settings
         </h1>
         <p className="mt-2 font-body text-sm text-navy-soft">
-          Buyers see your address and delivery prices on your storefront.
-          You need a complete delivery price list before you can list any
-          products.
+          Buyers see your address and profile picture on your storefront.
         </p>
-
-        {redirectedForDelivery && (
-          <div className="mt-6 border border-blue bg-ice px-4 py-3">
-            <p className="font-body text-sm text-navy">
-              Set a delivery price for every state to unlock product
-              listing.
-            </p>
-          </div>
-        )}
-
-        {!deliveryComplete && (
-          <div className="mt-6 border border-red-300 bg-red-50 px-4 py-3">
-            <p className="font-body text-sm text-red-700">
-              {missingCount} of {NIGERIAN_STATES.length} states still need a
-              delivery price. You can't list products until every state has
-              one.
-            </p>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-8">
           {/* Profile picture */}
@@ -275,54 +204,6 @@ function ShopSettingsContent() {
             />
           </div>
 
-          {/* Delivery pricing */}
-          <div>
-            <label className="font-body text-sm font-medium text-navy">
-              Delivery price by state (₦)
-            </label>
-            <p className="mt-1 font-body text-xs text-navy-soft">
-              Set what you charge to deliver to each state. Enter 0 for
-              anywhere delivery is free.
-            </p>
-
-            <div className="mt-3 flex gap-2">
-              <input
-                type="number"
-                min="0"
-                value={bulkPrice}
-                onChange={(e) => setBulkPrice(e.target.value)}
-                placeholder="Apply one price to all states"
-                className="focus-ring flex-1 border border-line bg-ice px-4 py-2.5 font-body text-sm text-navy placeholder:text-navy-soft/60"
-              />
-              <button
-                type="button"
-                onClick={applyBulkPrice}
-                className="focus-ring shrink-0 border border-blue px-4 py-2.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
-              >
-                Apply to all
-              </button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {NIGERIAN_STATES.map((state) => (
-                <div key={state} className="flex items-center justify-between gap-3 border border-line bg-ice px-3 py-2">
-                  <label htmlFor={`price-${state}`} className="font-body text-sm text-navy">
-                    {state}
-                  </label>
-                  <input
-                    id={`price-${state}`}
-                    type="number"
-                    min="0"
-                    value={prices[state] ?? ""}
-                    onChange={(e) => updatePrice(state, e.target.value)}
-                    placeholder="₦"
-                    className="focus-ring w-28 border border-line bg-paper px-2 py-1.5 text-right font-body text-sm text-navy placeholder:text-navy-soft/60"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
           {error && <p className="font-body text-sm text-red-700">{error}</p>}
           {saved && <p className="font-body text-sm text-blue">✓ Saved.</p>}
 
@@ -336,13 +217,5 @@ function ShopSettingsContent() {
         </form>
       </div>
     </main>
-  );
-}
-
-export default function ShopSettingsPage() {
-  return (
-    <Suspense fallback={null}>
-      <ShopSettingsContent />
-    </Suspense>
   );
 }

@@ -43,6 +43,7 @@ export default function NewProductPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [dropshipPrice, setDropshipPrice] = useState("");
   const [priceType, setPriceType] = useState<"fixed" | "negotiable">("fixed");
   const [category, setCategory] = useState(productCategories[0]);
   const [images, setImages] = useState<PickedImage[]>([]);
@@ -160,6 +161,11 @@ export default function NewProductPage() {
       setError("Enter a valid price.");
       return;
     }
+    const dropshipPriceNumber = Number(dropshipPrice);
+    if (!dropshipPrice || Number.isNaN(dropshipPriceNumber) || dropshipPriceNumber <= 0) {
+      setError("Enter a valid dropshipping price.");
+      return;
+    }
     if (images.length === 0) {
       setError("Add at least one photo.");
       return;
@@ -172,9 +178,9 @@ export default function NewProductPage() {
       setError("Select at least one size you have in stock.");
       return;
     }
-    if (priceType === "negotiable" && !shopPhone) {
+    if (!shopPhone) {
       setError(
-        "Add a phone number to your shop before listing negotiable items — that's how buyers reach you on WhatsApp."
+        "Add a phone number to your shop before listing — that's how buyers and dropshippers reach you on WhatsApp."
       );
       return;
     }
@@ -239,6 +245,7 @@ export default function NewProductPage() {
         name: name.trim(),
         description: description.trim() || null,
         price: priceNumber,
+        dropship_price: dropshipPriceNumber,
         price_type: priceType,
         category,
         images: imageUrls,
@@ -386,22 +393,38 @@ export default function NewProductPage() {
               />
             </div>
             <div>
-              <label htmlFor="category" className="font-body text-sm font-medium text-navy">
-                Category
+              <label htmlFor="dropshipPrice" className="font-body text-sm font-medium text-navy">
+                Dropshipping price (₦)
               </label>
-              <select
-                id="category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
+              <input
+                id="dropshipPrice"
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                value={dropshipPrice}
+                onChange={(e) => setDropshipPrice(e.target.value)}
                 className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
-              >
-                {productCategories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="category" className="font-body text-sm font-medium text-navy">
+              Category
+            </label>
+            <select
+              id="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="focus-ring mt-2 w-full border border-line bg-ice px-4 py-3 font-body text-sm text-navy"
+            >
+              {productCategories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </div>
 
           {!isDigitalProduct && (
@@ -422,7 +445,7 @@ export default function NewProductPage() {
                 >
                   <span className="block font-medium">Fixed price</span>
                   <span className={`block text-xs ${priceType === "fixed" ? "text-white/80" : "text-navy-soft"}`}>
-                    Buyers pay and check out as normal
+                    You're not open to lower offers
                   </span>
                 </button>
                 <button
@@ -437,17 +460,19 @@ export default function NewProductPage() {
                 >
                   <span className="block font-medium">Negotiable</span>
                   <span className={`block text-xs ${priceType === "negotiable" ? "text-white/80" : "text-navy-soft"}`}>
-                    Buyers message you on WhatsApp instead
+                    You're open to offers over WhatsApp
                   </span>
                 </button>
               </div>
-              {priceType === "negotiable" && !shopPhone && (
-                <p className="mt-2 font-body text-xs text-red-700">
-                  Your shop has no phone number on file, so buyers won't be
-                  able to reach you. Add one in your shop settings first.
-                </p>
-              )}
             </div>
+          )}
+
+          {!shopPhone && (
+            <p className="font-body text-xs text-red-700">
+              Your shop has no phone number on file, so buyers and
+              dropshippers won't be able to reach you on WhatsApp. Add one
+              in your shop settings before listing.
+            </p>
           )}
 
           {isDigitalProduct && (

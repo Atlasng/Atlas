@@ -1,10 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { useCart } from "@/lib/cart-context";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
 import type { User } from "@supabase/supabase-js";
 
@@ -14,6 +13,7 @@ type Product = {
   name: string;
   category: string;
   price: number;
+  dropship_price: number;
   price_type: "fixed" | "negotiable";
   images: string[];
   sizes: string[];
@@ -46,7 +46,6 @@ const SCROLL_STATE_KEY = "atlas-marketplace-state";
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
-  const { count: cartCount, refresh: refreshCart } = useCart();
 
   const [user, setUser] = useState<User | null>(null);
   const [hasShop, setHasShop] = useState(false);
@@ -54,8 +53,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [addingProductId, setAddingProductId] = useState<string | null>(null);
-  const [addedProductId, setAddedProductId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,7 +60,9 @@ export default function DashboardPage() {
 
     supabase
       .from("products")
-      .select("id, shop_id, name, category, price, price_type, images, sizes, colors, shop_name, shop_phone")
+      .select(
+        "id, shop_id, name, category, price, dropship_price, price_type, images, sizes, colors, shop_name, shop_phone"
+      )
       .then(({ data }) => {
         if (!active) return;
         // Older rows (or anything inserted outside the app) may still have
@@ -147,73 +146,40 @@ export default function DashboardPage() {
     router.replace("/login");
   }
 
-  function handleQuickNegotiate(product: Product) {
+  function variantLabel(product: Product) {
+    if (product.sizes.length > 0 && product.colors.length > 0) return "size and color";
+    if (product.sizes.length > 0) return "size";
+    return "color";
+  }
+
+  function handleQuickChat(product: Product) {
     if (product.sizes.length > 0 || product.colors.length > 0) {
-      setToast(`Open "${product.name}" to pick a ${
-        product.sizes.length > 0 && product.colors.length > 0
-          ? "size and color"
-          : product.sizes.length > 0
-          ? "size"
-          : "color"
-      } before negotiating.`);
+      setToast(`Open "${product.name}" to pick a ${variantLabel(product)} first.`);
       return;
     }
     if (!product.shop_phone) {
-      setToast(`This seller hasn't added a WhatsApp number yet.`);
+      setToast("This seller hasn't added a WhatsApp number yet.");
       return;
     }
 
-    const message = `Hi! I'm interested in "${product.name}" listed for ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
+    const priceNote =
+      product.price_type === "negotiable" ? "asking price" : "price";
+    const message = `Hi! I'm interested in "${product.name}" listed at ${priceNote} ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
     window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
   }
 
-  async function handleQuickAddToCart(product: Product) {
-    if (product.sizes.length > 0) {
-      setToast(`Select a size for "${product.name}" to add it to your cart.`);
+  function handleQuickDropship(product: Product) {
+    if (product.sizes.length > 0 || product.colors.length > 0) {
+      setToast(`Open "${product.name}" to pick a ${variantLabel(product)} first.`);
       return;
     }
-    if (product.colors.length > 0) {
-      setToast(`Select a color for "${product.name}" to add it to your cart.`);
-      return;
-    }
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      router.push("/login");
+    if (!product.shop_phone) {
+      setToast("This seller hasn't added a WhatsApp number yet.");
       return;
     }
 
-    setAddingProductId(product.id);
-
-    const { data: existing } = await supabase
-      .from("cart_items")
-      .select("id, quantity")
-      .eq("user_id", session.user.id)
-      .eq("product_id", product.id)
-      .eq("size", "")
-      .maybeSingle();
-
-    if (existing) {
-      await supabase
-        .from("cart_items")
-        .update({ quantity: existing.quantity + 1 })
-        .eq("id", existing.id);
-    } else {
-      await supabase.from("cart_items").insert({
-        user_id: session.user.id,
-        product_id: product.id,
-        quantity: 1,
-        size: "",
-      });
-    }
-
-    await refreshCart();
-    setAddingProductId(null);
-    setAddedProductId(product.id);
-    setTimeout(() => setAddedProductId(null), 1500);
+    const message = `Hi! I'd like to dropship "${product.name}" at your dropshipping price of ₦${product.dropship_price.toLocaleString()} on Atlas. Can we talk?`;
+    window.open(buildWhatsAppLink(product.shop_phone, message), "_blank");
   }
 
   if (loading) {
@@ -246,12 +212,9 @@ export default function DashboardPage() {
         daysLeft={daysLeft}
         products={products}
         productsLoading={productsLoading}
-        addingProductId={addingProductId}
-        addedProductId={addedProductId}
-        cartCount={cartCount}
         onLogout={handleLogout}
-        onQuickAddToCart={handleQuickAddToCart}
-        onQuickNegotiate={handleQuickNegotiate}
+        onQuickChat={handleQuickChat}
+        onQuickDropship={handleQuickDropship}
       />
       {toast && <Toast message={toast} />}
     </Suspense>
@@ -267,12 +230,9 @@ function DashboardBody({
   daysLeft,
   products,
   productsLoading,
-  addingProductId,
-  addedProductId,
-  cartCount,
   onLogout,
-  onQuickAddToCart,
-  onQuickNegotiate,
+  onQuickChat,
+  onQuickDropship,
 }: {
   user: User | null;
   name: string;
@@ -282,17 +242,12 @@ function DashboardBody({
   daysLeft: number | null;
   products: Product[];
   productsLoading: boolean;
-  addingProductId: string | null;
-  addedProductId: string | null;
-  cartCount: number;
   onLogout: () => void;
-  onQuickAddToCart: (product: Product) => void;
-  onQuickNegotiate: (product: Product) => void;
+  onQuickChat: (product: Product) => void;
+  onQuickDropship: (product: Product) => void;
 }) {
   const searchParams = useSearchParams();
   const restoredRef = useRef(false);
-
-  const firstName = name.trim().split(/\s+/)[0]?.split("@")[0] ?? "";
 
   const categoryParam = searchParams.get("category");
   const initialCategory = categoryFilters.includes(categoryParam ?? "")
@@ -349,7 +304,7 @@ function DashboardBody({
   }, [products, activeCategory, searchTerm]);
 
   return (
-    <main className="min-h-screen bg-paper pb-20">
+    <main className="min-h-screen bg-paper">
       {/* Header */}
       <header className="sticky top-0 z-20 border-b border-line bg-paper">
         <div className="mx-auto flex max-w-content flex-wrap items-center justify-between gap-4 px-6 py-5 md:px-10">
@@ -379,20 +334,31 @@ function DashboardBody({
               />
             </div>
 
+            {user && (
+              <Link
+                href="/account"
+                aria-label="My account"
+                className="focus-ring shrink-0 text-navy-soft transition-colors hover:text-navy"
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                  <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
+                  <path
+                    d="M3.5 15c0-3 2.5-5 5.5-5s5.5 2 5.5 5"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </Link>
+            )}
+
             {user ? (
-              <div className="flex shrink-0 items-center gap-3">
-                {firstName && (
-                  <span className="font-mono text-xl font-black uppercase tracking-tight text-navy">
-                    @{firstName}
-                  </span>
-                )}
-                <button
-                  onClick={onLogout}
-                  className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
-                >
-                  Log out
-                </button>
-              </div>
+              <button
+                onClick={onLogout}
+                className="focus-ring shrink-0 font-body text-sm font-medium text-navy-soft transition-colors hover:text-navy"
+              >
+                Log out
+              </button>
             ) : (
               <div className="flex shrink-0 items-center gap-3">
                 <Link
@@ -414,10 +380,27 @@ function DashboardBody({
       </header>
 
       <div className="mx-auto max-w-content px-6 pb-12 pt-6 md:px-10">
-        {!user && (
+        {user ? (
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-ice text-navy-soft">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <circle cx="9" cy="6.2" r="3.2" stroke="currentColor" strokeWidth="1.5" />
+                <path
+                  d="M2.8 15.5c.9-3 3.4-4.8 6.2-4.8s5.3 1.8 6.2 4.8"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </div>
+            <span className="font-display text-2xl tracking-tightest text-navy md:text-3xl">
+              {name}
+            </span>
+          </div>
+        ) : (
           <div className="flex flex-wrap items-center gap-4">
             <p className="font-body text-sm text-navy-soft">
-              Log in or create an account to open a shop and manage orders.
+              Log in or create an account to open a shop and list products.
             </p>
             <div className="flex gap-3">
               <Link
@@ -448,7 +431,7 @@ function DashboardBody({
                   <h2 className="mt-1 font-display text-2xl text-white">
                     {isExpired
                       ? "Renew your plan to keep selling"
-                      : "Manage your listings and orders"}
+                      : "Manage your listings"}
                   </h2>
                   {expiringSoon && !isExpired && (
                     <p className="mt-2 max-w-md font-body text-sm text-red-300">
@@ -571,29 +554,26 @@ function DashboardBody({
                     </Link>
                     <p className="mt-2 font-body text-sm font-medium text-navy">
                       ₦{product.price.toLocaleString()}
+                      {product.price_type === "negotiable" && (
+                        <span className="ml-1 font-body text-xs font-normal text-navy-soft">
+                          (negotiable)
+                        </span>
+                      )}
                     </p>
-                    {product.price_type === "negotiable" ? (
-                      <button
-                        type="button"
-                        onClick={() => onQuickNegotiate(product)}
-                        className="focus-ring mt-3 w-full bg-[#25D366] px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-[#1DA851]"
-                      >
-                        Negotiate on WhatsApp
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => onQuickAddToCart(product)}
-                        disabled={addingProductId === product.id}
-                        className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-                      >
-                        {addingProductId === product.id
-                          ? "Adding..."
-                          : addedProductId === product.id
-                          ? "✓ Added"
-                          : "Add to cart"}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => onQuickChat(product)}
+                      className="focus-ring mt-3 w-full bg-[#25D366] px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-[#1DA851]"
+                    >
+                      Chat on WhatsApp
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onQuickDropship(product)}
+                      className="focus-ring mt-2 w-full border border-blue px-4 py-2 font-body text-xs font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+                    >
+                      Dropship · ₦{product.dropship_price.toLocaleString()}
+                    </button>
                   </div>
                 </div>
               ))}
@@ -617,140 +597,7 @@ function DashboardBody({
           </Link>
         </div>
       </div>
-
-      <BottomNav user={user} cartCount={cartCount} />
     </main>
-  );
-}
-
-function BottomNav({
-  user,
-  cartCount,
-}: {
-  user: User | null;
-  cartCount: number;
-}) {
-  const pathname = usePathname();
-
-  const items = [
-    {
-      href: "/dashboard",
-      label: "Home",
-      isActive: pathname === "/dashboard",
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path
-            d="M2.5 8.5 9 3l6.5 5.5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M4 7.5V15h10V7.5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ),
-    },
-    {
-      href: "/cart",
-      label: "Cart",
-      isActive: pathname === "/cart",
-      badge: cartCount > 0 ? (cartCount > 99 ? "99+" : cartCount) : null,
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-          <path
-            d="M2 5h2l1.2 8.4a1.5 1.5 0 0 0 1.5 1.3h6.6a1.5 1.5 0 0 0 1.5-1.3L16 6H5"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
-          <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
-        </svg>
-      ),
-    },
-    ...(user
-      ? [
-          {
-            href: "/orders",
-            label: "Orders",
-            isActive: pathname === "/orders",
-            badge: null as string | number | null,
-            icon: (
-              <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-                <path
-                  d="M4 2h10v14l-2-1.2-1.5 1.2L9 14.8 7.5 16 6 14.8 4 16V2Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M6.5 6h5M6.5 9h5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ),
-          },
-          {
-            href: "/dashboard/shop",
-            label: "Account",
-            isActive: pathname === "/dashboard/shop",
-            badge: null as string | number | null,
-            icon: (
-              <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-                <circle cx="9" cy="6" r="3" stroke="currentColor" strokeWidth="1.5" />
-                <path
-                  d="M3.5 15c0-3 2.5-5 5.5-5s5.5 2 5.5 5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ),
-          },
-        ]
-      : []),
-  ];
-
-  return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper pb-[env(safe-area-inset-bottom)]">
-      <div className="mx-auto flex max-w-content items-stretch justify-around">
-        {items.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-label={
-              item.label === "Cart"
-                ? `Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`
-                : item.label
-            }
-            className={`focus-ring relative flex flex-1 flex-col items-center gap-1 py-2.5 font-body text-[11px] transition-colors ${
-              item.isActive
-                ? "text-blue"
-                : "text-navy-soft hover:text-navy"
-            }`}
-          >
-            <span className="relative">
-              {item.icon}
-              {item.badge && (
-                <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-[16px] items-center justify-center bg-blue px-1 font-body text-[10px] font-medium leading-none text-white">
-                  {item.badge}
-                </span>
-              )}
-            </span>
-            {item.label}
-          </Link>
-        ))}
-      </div>
-    </nav>
   );
 }
 

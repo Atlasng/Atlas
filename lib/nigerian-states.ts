@@ -1,6 +1,6 @@
-// The 36 states, plus the FCT (Abuja) — included so sellers can actually
-// price delivery to the capital. If you truly want exactly 36 entries with
-// no FCT, just remove the last line.
+// Kept around in case any page still wants a state dropdown (e.g. a
+// shop's own location). The delivery-pricing completeness helpers that
+// used to live here are gone along with the motor-park delivery system.
 export const NIGERIAN_STATES = [
   "Abia",
   "Adamawa",
@@ -40,16 +40,3 @@ export const NIGERIAN_STATES = [
   "Zamfara",
   "FCT (Abuja)",
 ] as const;
-
-export type DeliveryPrices = Record<string, number>;
-
-// A shop's delivery pricing only "counts" as set once every state has an
-// explicit, non-negative number — used to gate access to product listing.
-export function hasCompleteDeliveryPricing(
-  prices: DeliveryPrices | null | undefined
-): boolean {
-  if (!prices) return false;
-  return NIGERIAN_STATES.every(
-    (state) => typeof prices[state] === "number" && prices[state] >= 0
-  );
-}

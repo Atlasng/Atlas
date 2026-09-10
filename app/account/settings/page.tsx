@@ -16,6 +16,7 @@ export default function AccountSettingsPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -35,11 +36,12 @@ export default function AccountSettingsPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name, avatar_url")
+        .select("full_name, avatar_url, delivery_address")
         .eq("id", session.user.id)
         .maybeSingle();
 
       setFullName(profile?.full_name ?? "");
+      setDeliveryAddress(profile?.delivery_address ?? "");
       setAvatarUrl(profile?.avatar_url ?? null);
       setChecking(false);
     });
@@ -95,7 +97,11 @@ export default function AccountSettingsPage() {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ full_name: fullName.trim(), avatar_url: newAvatarUrl })
+        .update({
+          full_name: fullName.trim(),
+          avatar_url: newAvatarUrl,
+          delivery_address: deliveryAddress.trim() || null,
+        })
         .eq("id", userId);
 
       if (updateError) throw new Error(updateError.message);
@@ -190,6 +196,24 @@ export default function AccountSettingsPage() {
             />
             <p className="mt-1 font-body text-xs text-navy-soft">
               This is the name shown on your reviews and comments.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="deliveryAddress" className="font-body text-sm font-medium text-navy">
+              Delivery address
+            </label>
+            <textarea
+              id="deliveryAddress"
+              rows={3}
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+              placeholder="Street, area, city, state"
+              className="focus-ring mt-2 w-full resize-none border border-line bg-ice px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+            />
+            <p className="mt-1 font-body text-xs text-navy-soft">
+              Shared with a seller over WhatsApp when you reach out about a
+              product, so they know where to deliver.
             </p>
           </div>
 
