@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type Shop = {
   id: string;
+  user_id: string;
   shop_name: string;
   address: string | null;
   logo_url: string | null;
@@ -70,10 +71,15 @@ export default function ShopFrontPage() {
   const [reviewError, setReviewError] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // Owner-only "My reviews" panel — lists every review left on this shop.
+  const [myReviewsOpen, setMyReviewsOpen] = useState(false);
+  const [ownerReviews, setOwnerReviews] = useState<Review[] | null>(null);
+  const [ownerReviewsLoading, setOwnerReviewsLoading] = useState(false);
+
   async function loadAll() {
     const { data: shopData } = await supabase
       .from("shops")
-      .select("id, shop_name, address, logo_url")
+      .select("id, user_id, shop_name, address, logo_url")
       .eq("id", shopId)
       .maybeSingle();
 
@@ -195,6 +201,26 @@ export default function ShopFrontPage() {
     await loadAll();
   }
 
+  async function openMyReviews() {
+    setMyReviewsOpen(true);
+    setOwnerReviewsLoading(true);
+
+    // Fetched fresh rather than reusing the `reviews` state already on
+    // the page, so a review left moments ago shows up immediately.
+    const { data } = await supabase
+      .from("shop_reviews")
+      .select("id, user_id, rating, comment, created_at, profiles(full_name, avatar_url)")
+      .eq("shop_id", shopId)
+      .order("created_at", { ascending: false });
+
+    setOwnerReviews((data as unknown as Review[]) ?? []);
+    setOwnerReviewsLoading(false);
+  }
+
+  function closeMyReviews() {
+    setMyReviewsOpen(false);
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-ice">
@@ -221,6 +247,8 @@ export default function ShopFrontPage() {
     reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
+
+  const isOwner = Boolean(userId && shop.user_id === userId);
 
   return (
     <main className="min-h-screen bg-paper">
@@ -253,39 +281,57 @@ export default function ShopFrontPage() {
               <img src={shop.logo_url} alt={shop.shop_name} className="h-full w-full object-cover" />
             )}
           </button>
-          <div className="flex-1">
-            <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
-              {shop.shop_name}
-            </h1>
+          <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
+            {shop.shop_name}
+          </h1>
+        </div>
+
+        {/*
+          Address, rating, follower count, and the follow/my-reviews
+          action all live together in this one row so they hold a
+          consistent, predictable position regardless of how long the
+          shop name is or how the layout wraps on smaller screens.
+        */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-line py-4">
+          <div className="flex flex-wrap items-center gap-3">
             {shop.address && (
-              <p className="mt-1 font-body text-sm text-navy-soft">{shop.address}</p>
+              <span className="font-body text-sm text-navy-soft">{shop.address}</span>
             )}
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              {reviews.length > 0 ? (
-                <span className="flex items-center gap-1.5 font-body text-sm text-navy">
-                  <Stars value={avgRating} />
-                  {avgRating.toFixed(1)} ({reviews.length} review{reviews.length === 1 ? "" : "s"})
-                </span>
-              ) : (
-                <span className="font-body text-sm text-navy-soft">No reviews yet</span>
-              )}
-              <span className="font-body text-sm text-navy-soft">
-                {followerCount} follower{followerCount === 1 ? "" : "s"}
+            {reviews.length > 0 ? (
+              <span className="flex items-center gap-1.5 font-body text-sm text-navy">
+                <Stars value={avgRating} />
+                {avgRating.toFixed(1)} ({reviews.length} review{reviews.length === 1 ? "" : "s"})
               </span>
-            </div>
+            ) : (
+              <span className="font-body text-sm text-navy-soft">No reviews yet</span>
+            )}
+            <span className="font-body text-sm text-navy-soft">
+              {followerCount} follower{followerCount === 1 ? "" : "s"}
+            </span>
           </div>
-          <button
-            type="button"
-            onClick={toggleFollow}
-            disabled={followBusy}
-            className={`focus-ring shrink-0 px-6 py-2.5 font-body text-sm font-medium transition-colors disabled:opacity-60 ${
-              isFollowing
-                ? "border border-blue text-blue hover:bg-blue hover:text-white"
-                : "bg-blue text-white hover:bg-blue-dark"
-            }`}
-          >
-            {isFollowing ? "Following" : "Follow"}
-          </button>
+
+          {isOwner ? (
+            <button
+              type="button"
+              onClick={openMyReviews}
+              className="focus-ring shrink-0 border border-blue px-6 py-2.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
+            >
+              My reviews
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleFollow}
+              disabled={followBusy}
+              className={`focus-ring shrink-0 px-6 py-2.5 font-body text-sm font-medium transition-colors disabled:opacity-60 ${
+                isFollowing
+                  ? "border border-blue text-blue hover:bg-blue hover:text-white"
+                  : "bg-blue text-white hover:bg-blue-dark"
+              }`}
+            >
+              {isFollowing ? "Following" : "Follow"}
+            </button>
+          )}
         </div>
 
         {/* Products */}
@@ -327,43 +373,45 @@ export default function ShopFrontPage() {
             Reviews
           </h2>
 
-          {/* Write a review */}
-          <div className="mt-6 border border-line bg-ice p-5">
-            <p className="font-body text-sm font-medium text-navy">
-              {myRating > 0 ? "Update your review" : "Write a review"}
-            </p>
-            <div className="mt-3 flex gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  type="button"
-                  onClick={() => setMyRating(star)}
-                  aria-label={`${star} star${star === 1 ? "" : "s"}`}
-                  className="focus-ring text-2xl leading-none text-yellow-500"
-                >
-                  {star <= myRating ? "★" : <span className="text-line">★</span>}
-                </button>
-              ))}
+          {/* Write a review — hidden for the owner, who can't review their own shop */}
+          {!isOwner && (
+            <div className="mt-6 border border-line bg-ice p-5">
+              <p className="font-body text-sm font-medium text-navy">
+                {myRating > 0 ? "Update your review" : "Write a review"}
+              </p>
+              <div className="mt-3 flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setMyRating(star)}
+                    aria-label={`${star} star${star === 1 ? "" : "s"}`}
+                    className="focus-ring text-2xl leading-none text-yellow-500"
+                  >
+                    {star <= myRating ? "★" : <span className="text-line">★</span>}
+                  </button>
+                ))}
+              </div>
+              <textarea
+                rows={3}
+                value={myComment}
+                onChange={(e) => setMyComment(e.target.value)}
+                placeholder="Share your experience with this shop (optional)"
+                className="focus-ring mt-3 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
+              />
+              {reviewError && (
+                <p className="mt-2 font-body text-sm text-red-700">{reviewError}</p>
+              )}
+              <button
+                type="button"
+                onClick={submitReview}
+                disabled={submittingReview}
+                className="focus-ring mt-3 bg-blue px-5 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+              >
+                {submittingReview ? "Saving..." : "Submit review"}
+              </button>
             </div>
-            <textarea
-              rows={3}
-              value={myComment}
-              onChange={(e) => setMyComment(e.target.value)}
-              placeholder="Share your experience with this shop (optional)"
-              className="focus-ring mt-3 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
-            />
-            {reviewError && (
-              <p className="mt-2 font-body text-sm text-red-700">{reviewError}</p>
-            )}
-            <button
-              type="button"
-              onClick={submitReview}
-              disabled={submittingReview}
-              className="focus-ring mt-3 bg-blue px-5 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-            >
-              {submittingReview ? "Saving..." : "Submit review"}
-            </button>
-          </div>
+          )}
 
           {/* Review list */}
           <div className="mt-6 space-y-4">
@@ -420,6 +468,70 @@ export default function ShopFrontPage() {
             alt={shop.shop_name}
             className="max-h-[85vh] max-w-full rounded-full object-contain"
           />
+        </div>
+      )}
+      {/* My reviews panel — owner-only, lists every review left on this shop */}
+      {myReviewsOpen && (
+        <div
+          className="fixed inset-0 z-30 flex items-start justify-center bg-navy/40 px-6 py-16 md:py-24"
+          onClick={closeMyReviews}
+        >
+          <div
+            className="w-full max-w-lg border border-line bg-paper"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line px-5 py-4">
+              <h3 className="font-display text-lg tracking-tightest text-navy">
+                My reviews
+              </h3>
+              <button
+                type="button"
+                onClick={closeMyReviews}
+                className="focus-ring font-body text-sm text-navy-soft transition-colors hover:text-navy"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="max-h-[65vh] overflow-y-auto p-3">
+              {ownerReviewsLoading ? (
+                <p className="p-3 font-body text-sm text-navy-soft">Loading...</p>
+              ) : !ownerReviews || ownerReviews.length === 0 ? (
+                <p className="p-3 font-body text-sm text-navy-soft">
+                  No reviews yet — they'll show up here once buyers leave one.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {ownerReviews.map((review) => (
+                    <div key={review.id} className="flex gap-3 border border-line bg-paper p-4">
+                      <Avatar
+                        url={review.profiles?.avatar_url}
+                        name={review.profiles?.full_name || "Anonymous buyer"}
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <p className="font-body text-sm font-medium text-navy">
+                            {review.profiles?.full_name || "Anonymous buyer"}
+                          </p>
+                          <Stars value={review.rating} />
+                        </div>
+                        {review.comment && (
+                          <p className="mt-2 font-body text-sm text-navy-soft">{review.comment}</p>
+                        )}
+                        <p className="mt-2 font-body text-xs text-navy-soft">
+                          {new Date(review.created_at).toLocaleDateString("en-NG", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </main>
