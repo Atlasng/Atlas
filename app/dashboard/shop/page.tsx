@@ -38,7 +38,7 @@ export default function AccountPage() {
   const [activeListings, setActiveListings] = useState(0);
   const [whatsappClicks, setWhatsappClicks] = useState(0);
   const [shopViews, setShopViews] = useState(0);
-  const [totalRevenue, setTotalRevenue] = useState(0);
+  const [totalWishlisted, setTotalWishlisted] = useState(0);
 
   // Followers/following panel (opened by clicking the count labels)
   const [panel, setPanel] = useState<"followers" | "following" | null>(null);
@@ -70,7 +70,7 @@ export default function AccountPage() {
       { count: listingsCount },
       { count: clicksCount },
       { count: viewsCount },
-      { data: orderRows },
+      { count: wishlistCount },
     ] = await Promise.all([
       supabase
         .from("products")
@@ -86,26 +86,26 @@ export default function AccountPage() {
         .select("id", { count: "exact", head: true })
         .eq("shop_id", shopId)
         .eq("type", "view"),
-      // Best-effort: if there's no `orders` table yet (or it uses
-      // different column names than shop_id/amount/status), this just
-      // errors quietly and revenue stays at ₦0. Update the table/column
-      // names here once real orders exist.
+      // Live count of wishlist rows belonging to THIS shop's products —
+      // i.e. how many times other people have wishlisted something you
+      // sell, not how many things you've personally wishlisted elsewhere.
+      // Because this is a plain COUNT(*) over `wishlists` joined to
+      // `products.shop_id`, the number automatically "deducts" the
+      // instant a row is deleted (a buyer un-wishlisting/cancelling) —
+      // no separate decrement logic required.
       supabase
-        .from("orders")
-        .select("amount")
-        .eq("shop_id", shopId)
-        .eq("status", "completed"),
+        .from("wishlists")
+        .select("id, products!inner(shop_id)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("products.shop_id", shopId),
     ]);
 
     setActiveListings(listingsCount ?? 0);
     setWhatsappClicks(clicksCount ?? 0);
     setShopViews(viewsCount ?? 0);
-    setTotalRevenue(
-      (orderRows ?? []).reduce(
-        (sum, r: { amount: number }) => sum + (r.amount ?? 0),
-        0
-      )
-    );
+    setTotalWishlisted(wishlistCount ?? 0);
   }
 
   useEffect(() => {
@@ -170,7 +170,7 @@ export default function AccountPage() {
     if (!shop) return;
 
     // Any insert/update/delete touching this shop's listings, WhatsApp
-    // clicks, page views, or orders re-pulls all four counts. Refetching
+    // clicks, page views, or wishlists re-pulls all four counts. Refetching
     // (rather than patching state locally) keeps the numbers correct even
     // if several events land close together.
     const channel = supabase
@@ -196,12 +196,15 @@ export default function AccountPage() {
         () => fetchStats(shop.id)
       )
       .on(
+        // `wishlists` has no shop_id column of its own, so we can't
+        // filter server-side the way the other subscriptions do — just
+        // refetch on any change and let fetchStats' join scope the
+        // count to this shop's products.
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "orders",
-          filter: `shop_id=eq.${shop.id}`,
+          table: "wishlists",
         },
         () => fetchStats(shop.id)
       )
@@ -286,7 +289,7 @@ export default function AccountPage() {
   const expiringSoon = daysLeft <= 5;
 
   const dashboardStats = [
-    { label: "Total revenue", value: `₦${totalRevenue.toLocaleString()}` },
+    { label: "Total wishlisted", value: totalWishlisted.toLocaleString() },
     { label: "WhatsApp clicks", value: whatsappClicks.toLocaleString() },
     { label: "Active listings", value: activeListings.toLocaleString() },
     { label: "Shop views", value: shopViews.toLocaleString() },
