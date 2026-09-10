@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { useCart } from "@/lib/cart-context";
 
 type Shop = {
   id: string;
@@ -16,17 +17,24 @@ type Shop = {
 type Product = {
   id: string;
   name: string;
+  category: string;
   price: number;
   images: string[];
+  sizes: string[];
+  colors: string[];
 };
 
-type Review = {
+type RatingInfo = { avg: number; count: number };
+
+type ProductReview = {
   id: string;
   user_id: string;
+  product_id: string;
   rating: number;
   comment: string | null;
   created_at: string;
   profiles: { full_name: string | null; avatar_url: string | null } | null;
+  products: { name: string } | null;
 };
 
 function Avatar({ url, name, size = "h-9 w-9" }: { url: string | null | undefined; name: string; size?: string }) {
@@ -41,10 +49,22 @@ function Avatar({ url, name, size = "h-9 w-9" }: { url: string | null | undefine
 }
 
 function Stars({ value, size = "text-sm" }: { value: number; size?: string }) {
+  // Renders a true proportional fill (e.g. 2.67 → ~53% of the way through
+  // the third star) instead of rounding to the nearest whole star, so the
+  // icons always agree with the decimal shown next to them.
+  const percent = Math.max(0, Math.min(100, (value / 5) * 100));
   return (
-    <span className={`text-yellow-500 ${size}`} aria-label={`${value} out of 5 stars`}>
-      {"★".repeat(Math.round(value))}
-      <span className="text-line">{"★".repeat(5 - Math.round(value))}</span>
+    <span
+      className={`relative inline-block whitespace-nowrap leading-none ${size}`}
+      aria-label={`${value} out of 5 stars`}
+    >
+      <span className="text-line">★★★★★</span>
+      <span
+        className="absolute inset-0 overflow-hidden text-yellow-500"
+        style={{ width: `${percent}%` }}
+      >
+        ★★★★★
+      </span>
     </span>
   );
 }
@@ -54,10 +74,11 @@ export default function ShopFrontPage() {
   const router = useRouter();
   const supabase = createClient();
   const shopId = params.id as string;
+  const { refresh: refreshCart } = useCart();
 
   const [shop, setShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [logoLightboxOpen, setLogoLightboxOpen] = useState(false);
 
@@ -66,15 +87,21 @@ export default function ShopFrontPage() {
   const [followerCount, setFollowerCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
 
-  const [myRating, setMyRating] = useState(0);
-  const [myComment, setMyComment] = useState("");
-  const [reviewError, setReviewError] = useState("");
-  const [submittingReview, setSubmittingReview] = useState(false);
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
+  const [addedProductId, setAddedProductId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
-  // Owner-only "My reviews" panel — lists every review left on this shop.
+  // Owner-only "My reviews" panel — lists every review left across all of
+  // this shop's products.
   const [myReviewsOpen, setMyReviewsOpen] = useState(false);
-  const [ownerReviews, setOwnerReviews] = useState<Review[] | null>(null);
+  const [ownerReviews, setOwnerReviews] = useState<ProductReview[] | null>(null);
   const [ownerReviewsLoading, setOwnerReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   async function loadAll() {
     const { data: shopData } = await supabase
@@ -89,27 +116,44 @@ export default function ShopFrontPage() {
     }
     setShop(shopData);
 
-    const [{ data: productData }, { data: reviewData }, { count: followCount }] =
-      await Promise.all([
-        supabase
-          .from("products")
-          .select("id, name, price, images")
-          .eq("shop_id", shopId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("shop_reviews")
-          .select("id, user_id, rating, comment, created_at, profiles(full_name, avatar_url)")
-          .eq("shop_id", shopId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("shop_follows")
-          .select("id", { count: "exact", head: true })
-          .eq("shop_id", shopId),
-      ]);
+    const [{ data: productData }, { count: followCount }] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id, name, category, price, images, sizes, colors")
+        .eq("shop_id", shopId)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("shop_follows")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+    ]);
 
-    setProducts(productData ?? []);
-    setReviews((reviewData as unknown as Review[]) ?? []);
+    // Older rows (or anything inserted outside the app) may still have
+    // null here even though the column is meant to always be an array —
+    // coalesce so `.length` never throws while checking variants.
+    const productList = ((productData as unknown as Product[]) ?? []).map((p) => ({
+      ...p,
+      sizes: p.sizes ?? [],
+      colors: p.colors ?? [],
+    }));
+    setProducts(productList);
     setFollowerCount(followCount ?? 0);
+
+    // Reviews are per-product, so pull them across every product this
+    // shop owner has listed rather than a single shop-level review.
+    const productIds = productList.map((p) => p.id);
+    let reviewData: ProductReview[] = [];
+    if (productIds.length > 0) {
+      const { data } = await supabase
+        .from("product_comments")
+        .select(
+          "id, user_id, product_id, rating, comment, created_at, profiles(full_name, avatar_url), products(name)"
+        )
+        .in("product_id", productIds)
+        .order("created_at", { ascending: false });
+      reviewData = (data as unknown as ProductReview[]) ?? [];
+    }
+    setReviews(reviewData);
 
     const {
       data: { session },
@@ -125,14 +169,6 @@ export default function ShopFrontPage() {
         .eq("user_id", session.user.id)
         .maybeSingle();
       setIsFollowing(Boolean(followRow));
-
-      const mine = (reviewData as unknown as Review[] | null)?.find(
-        (r) => r.user_id === session.user.id
-      );
-      if (mine) {
-        setMyRating(mine.rating);
-        setMyComment(mine.comment ?? "");
-      }
     }
 
     setLoading(false);
@@ -167,58 +203,81 @@ export default function ShopFrontPage() {
     setFollowBusy(false);
   }
 
-  async function submitReview() {
-    setReviewError("");
-
-    if (!userId) {
-      router.push("/login");
-      return;
-    }
-    if (myRating < 1) {
-      setReviewError("Pick a star rating first.");
-      return;
-    }
-
-    setSubmittingReview(true);
-
-    const { error } = await supabase.from("shop_reviews").upsert(
-      {
-        shop_id: shopId,
-        user_id: userId,
-        rating: myRating,
-        comment: myComment.trim() || null,
-      },
-      { onConflict: "shop_id,user_id" }
-    );
-
-    setSubmittingReview(false);
-
-    if (error) {
-      setReviewError(error.message);
-      return;
-    }
-
-    await loadAll();
-  }
-
   async function openMyReviews() {
     setMyReviewsOpen(true);
     setOwnerReviewsLoading(true);
 
-    // Fetched fresh rather than reusing the `reviews` state already on
-    // the page, so a review left moments ago shows up immediately.
-    const { data } = await supabase
-      .from("shop_reviews")
-      .select("id, user_id, rating, comment, created_at, profiles(full_name, avatar_url)")
-      .eq("shop_id", shopId)
-      .order("created_at", { ascending: false });
+    // Fetched fresh (across every product in the shop) rather than
+    // reusing the `reviews` state already on the page, so a review left
+    // moments ago shows up immediately.
+    const productIds = products.map((p) => p.id);
+    let data: ProductReview[] = [];
+    if (productIds.length > 0) {
+      const res = await supabase
+        .from("product_comments")
+        .select(
+          "id, user_id, product_id, rating, comment, created_at, profiles(full_name, avatar_url), products(name)"
+        )
+        .in("product_id", productIds)
+        .order("created_at", { ascending: false });
+      data = (res.data as unknown as ProductReview[]) ?? [];
+    }
 
-    setOwnerReviews((data as unknown as Review[]) ?? []);
+    setOwnerReviews(data);
     setOwnerReviewsLoading(false);
   }
 
   function closeMyReviews() {
     setMyReviewsOpen(false);
+  }
+
+  async function handleQuickAddToCart(product: Product) {
+    if (product.sizes.length > 0) {
+      setToast(`Select a size for "${product.name}" to add it to your wishlist.`);
+      return;
+    }
+    if (product.colors.length > 0) {
+      setToast(`Select a color for "${product.name}" to add it to your wishlist.`);
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
+    setAddingProductId(product.id);
+
+    const { data: existing } = await supabase
+      .from("cart_items")
+      .select("id, quantity")
+      .eq("user_id", session.user.id)
+      .eq("product_id", product.id)
+      .eq("size", "")
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("cart_items")
+        .update({ quantity: existing.quantity + 1 })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("cart_items").insert({
+        user_id: session.user.id,
+        product_id: product.id,
+        quantity: 1,
+        size: "",
+      });
+    }
+
+    await refreshCart();
+    setAddingProductId(null);
+    setAddedProductId(product.id);
+    setTimeout(() => setAddedProductId(null), 1500);
   }
 
   if (loading) {
@@ -247,6 +306,19 @@ export default function ShopFrontPage() {
     reviews.length > 0
       ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
+
+  // Per-product ratings for the grid below, derived from the same
+  // `reviews` fetch used for the shop-wide combined rating above — no
+  // extra query needed since it already covers every product here.
+  const productRatings: Record<string, RatingInfo> = {};
+  for (const r of reviews) {
+    const bucket = productRatings[r.product_id] ?? { avg: 0, count: 0 };
+    const newCount = bucket.count + 1;
+    productRatings[r.product_id] = {
+      avg: (bucket.avg * bucket.count + r.rating) / newCount,
+      count: newCount,
+    };
+  }
 
   const isOwner = Boolean(userId && shop.user_id === userId);
 
@@ -347,24 +419,53 @@ export default function ShopFrontPage() {
         ) : (
           <div className="mt-6 grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
             {products.map((product) => (
-              <Link
+              <div
                 key={product.id}
-                href={`/product/${product.id}`}
                 className="block border border-line bg-paper transition-colors hover:border-blue"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={product.images[0]}
-                  alt={product.name}
-                  className="h-40 w-full object-cover sm:h-48"
-                />
+                <Link href={`/product/${product.id}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={product.images[0]}
+                    alt={product.name}
+                    className="h-40 w-full object-cover sm:h-48"
+                  />
+                </Link>
                 <div className="p-4">
-                  <h3 className="truncate font-display text-base text-navy">{product.name}</h3>
-                  <p className="mt-1 font-body text-sm font-medium text-navy">
+                  <p className="truncate font-body text-xs text-navy-soft">
+                    {product.category}
+                  </p>
+                  <Link href={`/product/${product.id}`}>
+                    <h3 className="mt-1 truncate font-display text-base text-navy hover:text-blue">
+                      {product.name}
+                    </h3>
+                  </Link>
+                  {productRatings[product.id] ? (
+                    <span className="mt-1 flex items-center gap-1 font-body text-xs text-navy-soft">
+                      <Stars value={productRatings[product.id].avg} size="text-xs" />
+                      {productRatings[product.id].avg.toFixed(1)} (
+                      {productRatings[product.id].count})
+                    </span>
+                  ) : (
+                    <p className="mt-1 font-body text-xs text-navy-soft">No reviews yet</p>
+                  )}
+                  <p className="mt-2 font-body text-sm font-medium text-navy">
                     ₦{product.price.toLocaleString()}
                   </p>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickAddToCart(product)}
+                    disabled={addingProductId === product.id}
+                    className="focus-ring mt-3 w-full bg-blue px-4 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
+                  >
+                    {addingProductId === product.id
+                      ? "Adding..."
+                      : addedProductId === product.id
+                      ? "✓ Added"
+                      : "Wishlist"}
+                  </button>
                 </div>
-              </Link>
+              </div>
             ))}
           </div>
         )}
@@ -374,46 +475,6 @@ export default function ShopFrontPage() {
           <h2 className="font-display text-2xl tracking-tightest text-navy">
             Reviews
           </h2>
-
-          {/* Write a review — hidden for the owner, who can't review their own shop */}
-          {!isOwner && (
-            <div className="mt-6 border border-line bg-ice p-5">
-              <p className="font-body text-sm font-medium text-navy">
-                {myRating > 0 ? "Update your review" : "Write a review"}
-              </p>
-              <div className="mt-3 flex gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setMyRating(star)}
-                    aria-label={`${star} star${star === 1 ? "" : "s"}`}
-                    className="focus-ring text-2xl leading-none text-yellow-500"
-                  >
-                    {star <= myRating ? "★" : <span className="text-line">★</span>}
-                  </button>
-                ))}
-              </div>
-              <textarea
-                rows={3}
-                value={myComment}
-                onChange={(e) => setMyComment(e.target.value)}
-                placeholder="Share your experience with this shop (optional)"
-                className="focus-ring mt-3 w-full resize-none border border-line bg-paper px-4 py-3 font-body text-sm text-navy placeholder:text-navy-soft/60"
-              />
-              {reviewError && (
-                <p className="mt-2 font-body text-sm text-red-700">{reviewError}</p>
-              )}
-              <button
-                type="button"
-                onClick={submitReview}
-                disabled={submittingReview}
-                className="focus-ring mt-3 bg-blue px-5 py-2.5 font-body text-sm font-medium text-white transition-colors hover:bg-blue-dark disabled:opacity-60"
-              >
-                {submittingReview ? "Saving..." : "Submit review"}
-              </button>
-            </div>
-          )}
 
           {/* Review list */}
           <div className="mt-6 space-y-4">
@@ -432,6 +493,11 @@ export default function ShopFrontPage() {
                       </p>
                       <Stars value={review.rating} />
                     </div>
+                    {review.products?.name && (
+                      <p className="mt-0.5 font-body text-xs text-navy-soft">
+                        on {review.products.name}
+                      </p>
+                    )}
                     {review.comment && (
                       <p className="mt-2 font-body text-sm text-navy-soft">{review.comment}</p>
                     )}
@@ -472,7 +538,7 @@ export default function ShopFrontPage() {
           />
         </div>
       )}
-      {/* My reviews panel — owner-only, lists every review left on this shop */}
+      {/* My reviews panel — owner-only, lists every review left across all of this shop's products */}
       {myReviewsOpen && (
         <div
           className="fixed inset-0 z-30 flex items-start justify-center bg-navy/40 px-6 py-16 md:py-24"
@@ -517,6 +583,11 @@ export default function ShopFrontPage() {
                           </p>
                           <Stars value={review.rating} />
                         </div>
+                        {review.products?.name && (
+                          <p className="mt-0.5 font-body text-xs text-navy-soft">
+                            on {review.products.name}
+                          </p>
+                        )}
                         {review.comment && (
                           <p className="mt-2 font-body text-sm text-navy-soft">{review.comment}</p>
                         )}
@@ -536,6 +607,17 @@ export default function ShopFrontPage() {
           </div>
         </div>
       )}
+      {toast && <Toast message={toast} />}
     </main>
+  );
+}
+
+function Toast({ message }: { message: string }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4">
+      <div className="pointer-events-auto max-w-sm border border-line bg-navy px-5 py-3 text-center font-body text-sm text-white shadow-lg transition-opacity">
+        {message}
+      </div>
+    </div>
   );
 }

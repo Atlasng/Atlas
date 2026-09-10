@@ -38,10 +38,22 @@ const SCROLL_STATE_KEY = "atlas-marketplace-state";
 type RatingInfo = { avg: number; count: number };
 
 function Stars({ value, size = "text-sm" }: { value: number; size?: string }) {
+  // Renders a true proportional fill (e.g. 2.67 → ~53% of the way through
+  // the third star) instead of rounding to the nearest whole star, so the
+  // icons always agree with the decimal shown next to them.
+  const percent = Math.max(0, Math.min(100, (value / 5) * 100));
   return (
-    <span className={`text-yellow-500 ${size}`} aria-label={`${value} out of 5 stars`}>
-      {"★".repeat(Math.round(value))}
-      <span className="text-line">{"★".repeat(5 - Math.round(value))}</span>
+    <span
+      className={`relative inline-block whitespace-nowrap leading-none ${size}`}
+      aria-label={`${value} out of 5 stars`}
+    >
+      <span className="text-line">★★★★★</span>
+      <span
+        className="absolute inset-0 overflow-hidden text-yellow-500"
+        style={{ width: `${percent}%` }}
+      >
+        ★★★★★
+      </span>
     </span>
   );
 }
