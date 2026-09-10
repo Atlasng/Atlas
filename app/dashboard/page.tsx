@@ -169,11 +169,11 @@ export default function DashboardPage() {
 
   async function handleQuickAddToCart(product: Product) {
     if (product.sizes.length > 0) {
-      setToast(`Select a size for "${product.name}" to add it to your cart.`);
+      setToast(`Select a size for "${product.name}" to add it to your wishlist.`);
       return;
     }
     if (product.colors.length > 0) {
-      setToast(`Select a color for "${product.name}" to add it to your cart.`);
+      setToast(`Select a color for "${product.name}" to add it to your wishlist.`);
       return;
     }
 
@@ -591,7 +591,7 @@ function DashboardBody({
                           ? "Adding..."
                           : addedProductId === product.id
                           ? "✓ Added"
-                          : "Add to cart"}
+                          : "Wishlist"}
                       </button>
                     )}
                   </div>
@@ -658,47 +658,22 @@ function BottomNav({
     },
     {
       href: "/cart",
-      label: "Cart",
+      label: "Wishlist",
       isActive: pathname === "/cart",
       badge: cartCount > 0 ? (cartCount > 99 ? "99+" : cartCount) : null,
       icon: (
         <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
           <path
-            d="M2 5h2l1.2 8.4a1.5 1.5 0 0 0 1.5 1.3h6.6a1.5 1.5 0 0 0 1.5-1.3L16 6H5"
+            d="M9 15.5s-6-3.7-6-8.2C3 4.8 4.8 3 7 3c1.2 0 2.3.6 3 1.5C10.7 3.6 11.8 3 13 3c2.2 0 4 1.8 4 4.3 0 4.5-6 8.2-6 8.2Z"
             stroke="currentColor"
             strokeWidth="1.5"
-            strokeLinecap="round"
             strokeLinejoin="round"
           />
-          <circle cx="7.5" cy="16.5" r="1" fill="currentColor" />
-          <circle cx="13.5" cy="16.5" r="1" fill="currentColor" />
         </svg>
       ),
     },
     ...(user
       ? [
-          {
-            href: "/orders",
-            label: "Orders",
-            isActive: pathname === "/orders",
-            badge: null as string | number | null,
-            icon: (
-              <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-                <path
-                  d="M4 2h10v14l-2-1.2-1.5 1.2L9 14.8 7.5 16 6 14.8 4 16V2Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M6.5 6h5M6.5 9h5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
-              </svg>
-            ),
-          },
           {
             href: "/dashboard/shop",
             label: "Account",
@@ -728,8 +703,8 @@ function BottomNav({
             key={item.href}
             href={item.href}
             aria-label={
-              item.label === "Cart"
-                ? `Cart, ${cartCount} item${cartCount === 1 ? "" : "s"}`
+              item.label === "Wishlist"
+                ? `Wishlist, ${cartCount} item${cartCount === 1 ? "" : "s"}`
                 : item.label
             }
             className={`focus-ring relative flex flex-1 flex-col items-center gap-1 py-2.5 font-body text-[11px] transition-colors ${
