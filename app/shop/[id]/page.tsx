@@ -281,33 +281,35 @@ export default function ShopFrontPage() {
               <img src={shop.logo_url} alt={shop.shop_name} className="h-full w-full object-cover" />
             )}
           </button>
-          <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
-            {shop.shop_name}
-          </h1>
+          <div>
+            <h1 className="font-display text-3xl tracking-tightest text-navy md:text-4xl">
+              {shop.shop_name}
+            </h1>
+            <p className="mt-1 font-body text-sm text-navy-soft">
+              {followerCount} follower{followerCount === 1 ? "" : "s"}
+            </p>
+            {reviews.length > 0 ? (
+              <span className="mt-1 flex items-center gap-1.5 font-body text-sm text-navy">
+                <Stars value={avgRating} />
+                {avgRating.toFixed(1)} ({reviews.length} review{reviews.length === 1 ? "" : "s"})
+              </span>
+            ) : (
+              <p className="mt-1 font-body text-sm text-navy-soft">No reviews yet</p>
+            )}
+          </div>
         </div>
 
         {/*
-          Address, rating, follower count, and the follow/my-reviews
-          action all live together in this one row so they hold a
-          consistent, predictable position regardless of how long the
-          shop name is or how the layout wraps on smaller screens.
+          Address and the follow/reviews action live together in this
+          one row so they hold a consistent, predictable position
+          regardless of how long the shop name is or how the layout
+          wraps on smaller screens.
         */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-y border-line py-4">
           <div className="flex flex-wrap items-center gap-3">
             {shop.address && (
               <span className="font-body text-sm text-navy-soft">{shop.address}</span>
             )}
-            {reviews.length > 0 ? (
-              <span className="flex items-center gap-1.5 font-body text-sm text-navy">
-                <Stars value={avgRating} />
-                {avgRating.toFixed(1)} ({reviews.length} review{reviews.length === 1 ? "" : "s"})
-              </span>
-            ) : (
-              <span className="font-body text-sm text-navy-soft">No reviews yet</span>
-            )}
-            <span className="font-body text-sm text-navy-soft">
-              {followerCount} follower{followerCount === 1 ? "" : "s"}
-            </span>
           </div>
 
           {isOwner ? (
@@ -316,7 +318,7 @@ export default function ShopFrontPage() {
               onClick={openMyReviews}
               className="focus-ring shrink-0 border border-blue px-6 py-2.5 font-body text-sm font-medium text-blue transition-colors hover:bg-blue hover:text-white"
             >
-              My reviews
+              Reviews
             </button>
           ) : (
             <button
@@ -482,7 +484,7 @@ export default function ShopFrontPage() {
           >
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
               <h3 className="font-display text-lg tracking-tightest text-navy">
-                My reviews
+                Reviews
               </h3>
               <button
                 type="button"
