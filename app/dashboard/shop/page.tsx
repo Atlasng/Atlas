@@ -22,13 +22,6 @@ type Shop = {
   plan_expires_at: string;
 };
 
-const stats = [
-  { label: "Total revenue", value: "₦0" },
-  { label: "Orders", value: "0" },
-  { label: "Active listings", value: "0" },
-  { label: "Shop views", value: "0" },
-];
-
 export default function AccountPage() {
   const router = useRouter();
   const supabase = createClient();
@@ -39,6 +32,13 @@ export default function AccountPage() {
   const [shop, setShop] = useState<Shop | null>(null);
   const [followerCount, setFollowerCount] = useState(0);
   const [following, setFollowing] = useState<FollowedShop[]>([]);
+
+  // Live dashboard stats — populated by fetchStats() and kept current by
+  // the realtime subscription further down.
+  const [activeListings, setActiveListings] = useState(0);
+  const [whatsappClicks, setWhatsappClicks] = useState(0);
+  const [shopViews, setShopViews] = useState(0);
+  const [totalRevenue, setTotalRevenue] = useState(0);
 
   // Followers/following panel (opened by clicking the count labels)
   const [panel, setPanel] = useState<"followers" | "following" | null>(null);
@@ -62,6 +62,51 @@ export default function AccountPage() {
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
+
+  // Pulls all four dashboard numbers for one shop. Defined outside load()
+  // so the realtime subscription below can re-run it on any change.
+  async function fetchStats(shopId: string) {
+    const [
+      { count: listingsCount },
+      { count: clicksCount },
+      { count: viewsCount },
+      { data: orderRows },
+    ] = await Promise.all([
+      supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId),
+      supabase
+        .from("shop_events")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .eq("type", "whatsapp_click"),
+      supabase
+        .from("shop_events")
+        .select("id", { count: "exact", head: true })
+        .eq("shop_id", shopId)
+        .eq("type", "view"),
+      // Best-effort: if there's no `orders` table yet (or it uses
+      // different column names than shop_id/amount/status), this just
+      // errors quietly and revenue stays at ₦0. Update the table/column
+      // names here once real orders exist.
+      supabase
+        .from("orders")
+        .select("amount")
+        .eq("shop_id", shopId)
+        .eq("status", "completed"),
+    ]);
+
+    setActiveListings(listingsCount ?? 0);
+    setWhatsappClicks(clicksCount ?? 0);
+    setShopViews(viewsCount ?? 0);
+    setTotalRevenue(
+      (orderRows ?? []).reduce(
+        (sum, r: { amount: number }) => sum + (r.amount ?? 0),
+        0
+      )
+    );
+  }
 
   useEffect(() => {
     async function load() {
@@ -113,11 +158,60 @@ export default function AccountPage() {
         .eq("shop_id", shopData.id);
       setFollowerCount(count ?? 0);
 
+      await fetchStats(shopData.id);
+
       setLoading(false);
     }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!shop) return;
+
+    // Any insert/update/delete touching this shop's listings, WhatsApp
+    // clicks, page views, or orders re-pulls all four counts. Refetching
+    // (rather than patching state locally) keeps the numbers correct even
+    // if several events land close together.
+    const channel = supabase
+      .channel(`account-stats-${shop.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "shop_events",
+          filter: `shop_id=eq.${shop.id}`,
+        },
+        () => fetchStats(shop.id)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "products",
+          filter: `shop_id=eq.${shop.id}`,
+        },
+        () => fetchStats(shop.id)
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "orders",
+          filter: `shop_id=eq.${shop.id}`,
+        },
+        () => fetchStats(shop.id)
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shop?.id]);
 
   async function openPanel(which: "followers" | "following") {
     setPanel(which);
@@ -190,6 +284,13 @@ export default function AccountPage() {
       (1000 * 60 * 60 * 24)
   );
   const expiringSoon = daysLeft <= 5;
+
+  const dashboardStats = [
+    { label: "Total revenue", value: `₦${totalRevenue.toLocaleString()}` },
+    { label: "WhatsApp clicks", value: whatsappClicks.toLocaleString() },
+    { label: "Active listings", value: activeListings.toLocaleString() },
+    { label: "Shop views", value: shopViews.toLocaleString() },
+  ];
 
   return (
     <main className="min-h-screen bg-paper">
@@ -332,7 +433,7 @@ export default function AccountPage() {
           </h2>
 
           <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-            {stats.map((stat) => (
+            {dashboardStats.map((stat) => (
               <div key={stat.label} className="border border-line bg-ice p-5">
                 <p className="font-body text-xs text-navy-soft">
                   {stat.label}
@@ -343,11 +444,6 @@ export default function AccountPage() {
               </div>
             ))}
           </div>
-
-          <p className="mt-10 max-w-md font-body text-sm text-navy-soft">
-            Sales and traffic analytics will appear here once your listings
-            start getting orders.
-          </p>
         </div>
       </div>
 

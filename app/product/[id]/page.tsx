@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { buildWhatsAppLink } from "@/lib/whatsapp";
+import { logShopEvent } from "@/lib/shop-events";
 
 type Product = {
   id: string;
@@ -108,6 +109,7 @@ export default function ProductPage() {
       variantBits ? ` (${variantBits})` : ""
     } listed at ${priceNote} ₦${product.price.toLocaleString()} on Atlas. Is it still available?`;
 
+    logShopEvent(product.shop_id, "whatsapp_click", product.id);
     window.open(buildWhatsAppLink(shopPhone, message), "_blank");
   }
 
@@ -124,6 +126,7 @@ export default function ProductPage() {
       variantBits ? ` (${variantBits})` : ""
     } at your dropshipping price of ₦${product.dropship_price.toLocaleString()} on Atlas. Can we talk?`;
 
+    logShopEvent(product.shop_id, "whatsapp_click", product.id);
     window.open(buildWhatsAppLink(shopPhone, message), "_blank");
   }
 
@@ -170,6 +173,13 @@ export default function ProductPage() {
             setIsOwner(true);
           }
         }
+      }
+
+      if (fetchedProduct) {
+        // Fire-and-forget — counts toward that shop's "Shop views" stat on
+        // the dashboard. Not gated on session, since anonymous visitors
+        // browsing the marketplace should count too.
+        logShopEvent(fetchedProduct.shop_id, "view", fetchedProduct.id);
       }
 
       setProduct(fetchedProduct);
